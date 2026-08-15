@@ -12,11 +12,6 @@ node_modules/
 .next/
 out/
 
-# opennext / wrangler build output
-.open-next/
-.wrangler/
-cloudflare-env.d.ts
-
 # production
 build/
 dist/
@@ -31,7 +26,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
-debug.log
 
 # env files
 .env
@@ -40,21 +34,30 @@ debug.log
 .env.test.local
 .env.production.local
 
-# sensitive data files
+# sensitive data files (real data never committed)
 data/admin.json
+data/friends.json
+data/moments.json
+data/projects.json
 
 # runtime cache
 data/anime-detail-cache.json
 data/anime.json
 data/music-cache.json
 
-# site runtime data (not committed)
-data/friends.json
-data/moments.json
-data/projects.json
-
 # vercel
 .vercel
+
+# cloudflare / opennext build output
+.open-next/
+.wrangler/
+cloudflare-env.d.ts
+
+# generated at build time (posts -> static data)
+lib/generated/
+
+# debug
+debug.log
 
 # typescript
 *.tsbuildinfo

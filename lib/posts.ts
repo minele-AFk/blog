@@ -2,42 +2,49 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 import { BlogPost, Category, Tag } from './types';
+// 构建时由 scripts/generate-posts-data.mjs 生成，供无持久磁盘环境（Cloudflare Workers）回退
+import { generatedPosts } from './generated/posts-data';
 
 const postsDirectory = path.join(process.cwd(), 'posts');
 
 export async function getPosts(): Promise<BlogPost[]> {
-  const filenames = fs.readdirSync(postsDirectory);
-  
-  const posts = filenames
-    .filter(filename => filename.endsWith('.md'))
-    .map(filename => {
-      const fullPath = path.join(postsDirectory, filename);
-      const fileContents = fs.readFileSync(fullPath, 'utf8');
-      const { data, content } = matter(fileContents);
-      
-      const slug = filename.replace(/\.md$/, '');
-      const readTime = Math.ceil(content.split('').length / 500);
-      
-      return {
-        id: slug,
-        title: data.title as string,
-        slug,
-        excerpt: (data.excerpt as string) || '',
-        content,
-        date: data.date as string,
-        tags: (data.tags as string[]) || [],
-        category: data.category as string || '其他',
-        author: data.author as string || '管理员',
-        coverImage: data.coverImage as string,
-        readTime,
-      } as BlogPost;
+  try {
+    const filenames = fs.readdirSync(postsDirectory);
+
+    const posts = filenames
+      .filter(filename => filename.endsWith('.md'))
+      .map(filename => {
+        const fullPath = path.join(postsDirectory, filename);
+        const fileContents = fs.readFileSync(fullPath, 'utf8');
+        const { data, content } = matter(fileContents);
+
+        const slug = filename.replace(/\.md$/, '');
+        const readTime = Math.ceil(content.split('').length / 500);
+
+        return {
+          id: slug,
+          title: data.title as string,
+          slug,
+          excerpt: (data.excerpt as string) || '',
+          content,
+          date: data.date as string,
+          tags: (data.tags as string[]) || [],
+          category: data.category as string || '其他',
+          author: data.author as string || '管理员',
+          coverImage: data.coverImage as string,
+          readTime,
+        } as BlogPost;
+      });
+
+    return posts.sort((a, b) => {
+      const timeA = a.date ? new Date(a.date).getTime() : 0;
+      const timeB = b.date ? new Date(b.date).getTime() : 0;
+      return timeB - timeA;
     });
-  
-  return posts.sort((a, b) => {
-    const timeA = a.date ? new Date(a.date).getTime() : 0;
-    const timeB = b.date ? new Date(b.date).getTime() : 0;
-    return timeB - timeA;
-  });
+  } catch {
+    // Workers 无持久磁盘：posts/ 不存在时回退到构建时生成的静态数据
+    return generatedPosts;
+  }
 }
 
 export async function getPostBySlug(slug: string): Promise<BlogPost | undefined> {
