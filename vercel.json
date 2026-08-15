@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/anime/cron",
+      "schedule": "0 */24 * * *"
+    }
+  ]
+}

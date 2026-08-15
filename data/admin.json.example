@@ -1,0 +1,5 @@
+{
+  "passwordHash": "使用 setAdminPassword() 函数生成",
+  "jwtSecret": "已弃用 - 请在 .env 中设置 JWT_SECRET 或使用随机密钥",
+  "createdAt": "2026-07-19T00:00:00.000Z"
+}
