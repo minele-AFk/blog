@@ -12,6 +12,11 @@ node_modules/
 .next/
 out/
 
+# opennext / wrangler build output
+.open-next/
+.wrangler/
+cloudflare-env.d.ts
+
 # production
 build/
 dist/
