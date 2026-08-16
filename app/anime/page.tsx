@@ -49,7 +49,8 @@ export default function AnimePage() {
       const res = await fetch('/api/anime');
       const result = await res.json();
       if (result.success) {
-        setAnimeList(result.data);
+        // 防御：确保 data 是数组，避免异常数据导致渲染崩溃白屏
+        setAnimeList(Array.isArray(result.data) ? result.data : []);
         setLastSync(result.meta?.lastSync || null);
         setConfigReady(result.meta?.configReady ?? true);
 
@@ -81,7 +82,7 @@ export default function AnimePage() {
         const result = await res.json();
         
         if (result.success) {
-          setAnimeList(result.data);
+          setAnimeList(Array.isArray(result.data) ? result.data : []);
           setLastSync(result.meta?.lastSync || null);
           setConfigReady(result.meta?.configReady ?? true);
           
@@ -271,7 +272,9 @@ export default function AnimePage() {
         </div>
       ) : (
         <motion.div layout className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-          <AnimatePresence mode="popLayout">
+          {/* 不使用 popLayout：该模式下切换标签/快速导航时退场元素会被绝对定位，
+              偶发导致网格布局塌陷成空白页 */}
+          <AnimatePresence>
             {filteredList.map((anime) => (
               <AnimeCard key={anime.id} anime={anime} />
             ))}

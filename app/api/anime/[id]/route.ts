@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCachedAnime } from '@/lib/kazumi';
+import { isCloudflare, kvGetJson, kvSetJson } from '@/lib/storage';
 
 const BANGUMI_API = 'https://api.bgmapi.com';
 const BANGUMI_TOKEN = process.env.BANGUMI_TOKEN || '';
@@ -8,13 +9,24 @@ const USER_AGENT = 'personal-blog/1.0';
 // 详情缓存有效期：7 天（详情数据相对稳定，避免每次实时请求外部 API）
 const DETAIL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+// 详情缓存 KV key（data: 前缀与 json-store / kazumi 保持一致，便于统一管理）
+const DETAIL_CACHE_KEY = 'data:anime-detail.json';
+
 interface DetailCache {
   data: unknown;
   updatedAt: number;
 }
 
-// 读取详情缓存
+// 读取详情缓存（Workers 用 KV，本地用 fs）
 async function getDetailCache(id: string): Promise<DetailCache | null> {
+  if (isCloudflare()) {
+    const all = await kvGetJson<Record<string, DetailCache>>(DETAIL_CACHE_KEY);
+    const entry = all?.[id];
+    if (!entry) return null;
+    // 未过期才返回
+    if (Date.now() - entry.updatedAt > DETAIL_TTL_MS) return null;
+    return entry;
+  }
   try {
     const fs = await import('fs/promises');
     const path = await import('path');
@@ -31,9 +43,25 @@ async function getDetailCache(id: string): Promise<DetailCache | null> {
   }
 }
 
-// 保存详情缓存
+// 保存详情缓存（Workers 用 KV，本地用 fs）
 async function setDetailCache(id: string, data: unknown): Promise<void> {
   try {
+    if (isCloudflare()) {
+      const all = (await kvGetJson<Record<string, DetailCache>>(DETAIL_CACHE_KEY)) || {};
+      all[id] = { data, updatedAt: Date.now() };
+      // 只保留最近 200 条，防止 KV 值无限增长
+      const keys = Object.keys(all);
+      if (keys.length > 200) {
+        const sorted = keys.sort(
+          (a, b) => (all[b].updatedAt ?? 0) - (all[a].updatedAt ?? 0)
+        );
+        for (const k of sorted.slice(200)) {
+          delete all[k];
+        }
+      }
+      await kvSetJson(DETAIL_CACHE_KEY, all);
+      return;
+    }
     const fs = await import('fs/promises');
     const path = await import('path');
     const dataDir = path.join(process.cwd(), 'data');
