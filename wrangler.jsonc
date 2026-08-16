@@ -28,13 +28,11 @@
   //   }
   // ],
   // 定时任务：追番每日同步（原 vercel.json crons 迁移到 Workers）
+  // 注意：Cloudflare Cron Triggers 只接受 cron 字符串，不支持 path 字段。
+  // cron 触发请求会打到 worker 根路径（UA 以 Cloudflare 开头），
+  // 同步逻辑仍可手动触发：GET /api/anime/cron?token=<CRON_SECRET>（或 ADMIN_TOKEN）
   "triggers": {
-    "crons": [
-      {
-        "cron": "0 0 * * *",
-        "path": "/api/anime/cron"
-      }
-    ]
+    "crons": ["0 0 * * *"]
   },
   // 公开变量（secrets 如 JWT_SECRET / ADMIN_PASSWORD / BANGUMI_TOKEN / CRON_SECRET
   // 请在 Cloudflare Dashboard -> Workers -> blog -> Settings -> Variables 中配置）
