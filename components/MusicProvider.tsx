@@ -377,13 +377,22 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const [pendingPlayOnLoad, setPendingPlayOnLoad] = useState(false);  // 修复4：歌单加载完成后是否自动播放
   const [playbackRate, setPlaybackRate] = useState(1);
 
+/** 第三方绝对地址统一走 /api/music/stream 代理播放（绕过 CORS/混合内容/防盗链）；本域相对路径（本地文件）直接播放 */
+const toPlayableUrl = (url: string): string => {
+  if (!url) return '';
+  if (/^https?:\/\//.test(url)) {
+    return `/api/music/stream?url=${encodeURIComponent(url)}`;
+  }
+  return url;
+};
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const activePlaylist = PLAYLISTS.find(p => p.id === activePlaylistId);
   const currentSong = playlist[currentIndex];
 
-  // 当前实际使用的播放 URL
-  const currentUrl = currentSong?.urls?.[currentUrlIdx] || currentSong?.url || '';
+  // 当前实际使用的播放 URL（第三方直链经代理播放）
+  const currentUrl = toPlayableUrl(currentSong?.urls?.[currentUrlIdx] || currentSong?.url || '');
 
   // 重置 URL 索引（切歌时）
   useEffect(() => {
@@ -564,7 +573,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     if (isPlaying) {
       audioRef.current.play().catch(() => {
         setIsPlaying(false);
-        setError('播放失败，请检查浏览器权限');
+        setError('播放失败，请稍后重试');
       });
     } else {
       audioRef.current.pause();
@@ -809,7 +818,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
           if (isSwitchingSource && isPlaying && audioRef.current) {
             audioRef.current.play().catch(() => {
               setIsPlaying(false);
-              setError('播放失败，请检查浏览器权限');
+              setError('播放失败，请稍后重试');
             });
           }
         }}
