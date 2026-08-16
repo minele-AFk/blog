@@ -110,7 +110,7 @@ export default function AnimeDetailPage() {
     <div className="min-h-screen p-4 sm:p-6 max-w-5xl mx-auto">
       {/* 返回按钮 */}
       <button
-        onClick={() => router.push('/anime')}
+        onClick={() => router.back()}
         className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors mb-6 ${
           isDayMode
             ? 'bg-white/80 border-gray-200 text-gray-700 hover:bg-white hover:border-gray-300 hover:text-gray-900'

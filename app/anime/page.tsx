@@ -263,24 +263,24 @@ export default function AnimePage() {
         ))}
       </div>
 
-      {/* 番剧列表 */}
-      {filteredList.length === 0 ? (
-        <div className="text-center py-20">
-          <p className="text-foreground-muted">
-            {animeList.length === 0 ? '暂无数据，点击标题同步获取番剧数据' : '该分类暂无番剧记录'}
-          </p>
-        </div>
-      ) : (
-        <motion.div layout className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-          {/* 不使用 popLayout：该模式下切换标签/快速导航时退场元素会被绝对定位，
-              偶发导致网格布局塌陷成空白页 */}
-          <AnimatePresence>
+        {loading ? (
+          <div className="text-center py-20">
+            <Loader2 className="w-8 h-8 animate-spin text-purple-400 mx-auto" />
+            <p className="text-foreground-muted mt-3">加载中...</p>
+          </div>
+        ) : filteredList.length === 0 ? (
+          <div className="text-center py-20">
+            <p className="text-foreground-muted">
+              {animeList.length === 0 ? '暂无数据，点击标题同步获取番剧数据' : '该分类暂无番剧记录'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
             {filteredList.map((anime) => (
               <AnimeCard key={anime.id} anime={anime} />
             ))}
-          </AnimatePresence>
-        </motion.div>
-      )}
+          </div>
+        )}
     </div>
   );
 }
