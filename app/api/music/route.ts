@@ -135,6 +135,14 @@ async function fetchNetEaseSongLegacy(songId: string): Promise<SongResult> {
       return { id: songId, error: 'not_found' }
     }
 
+    // 关键：网易云详情接口对 VIP/版权受限歌曲的 fee=1、st<0 等，但只要没有
+    // mp3 试听文件，outer/url 会返回 HTML 而非真实音频。先做标记，让前端
+    // 拿到 url 后能识别失败（用 0 字节占位 → fetch 时返回的就是 HTML 错误页）。
+    if (song.fee === 1 && song.st === -1) {
+      // VIP 且无试听：标记为不可用
+      return { id: songId, error: 'unavailable' }
+    }
+
     let lrcText = ''
     if (lrcRes && lrcRes.ok) {
       try {
@@ -180,6 +188,38 @@ async function fetchNetEaseSongLegacy(songId: string): Promise<SongResult> {
     console.error(`[api/music] 获取网易云歌曲 ${songId} 失败:`, error)
     return { id: songId, error: String(error) }
   }
+}
+
+/**
+ * 主动 HEAD 探测 outer URL：跟随 302 后 Content-Type 仍为 text/html
+ * （网易云对 VIP/版权受限歌曲的 outer/url 会返回 HTML 错误页），
+ * 直接把 url 标记为不可用，让前端走 fallback 跳过这首。
+ */
+async function probeAndMarkUnavailable(
+  playUrl: string
+): Promise<{ url: string; unavailable: boolean }> {
+  if (!playUrl || !playUrl.includes('music.163.com')) {
+    return { url: playUrl, unavailable: false }
+  }
+  try {
+    const r = await fetch(playUrl, {
+      method: 'HEAD',
+      redirect: 'follow',
+      signal: AbortSignal.timeout(8000),
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        Referer: 'https://music.163.com/',
+      },
+    })
+    const ct = r.headers.get('content-type') || ''
+    if (ct.includes('text/html')) {
+      return { url: 'unavailable', unavailable: true }
+    }
+  } catch {
+    /* 探测失败不动 url，前端播放会再次尝试 */
+  }
+  return { url: playUrl, unavailable: false }
 }
 
 async function fetchQQMusicSongLegacy(songId: string): Promise<SongResult> {
@@ -295,6 +335,15 @@ export async function GET(request: NextRequest) {
       source === 'qq'
         ? (await fetchViaMeting(songId, 'tencent')) || (await fetchQQMusicSongLegacy(songId))
         : (await fetchViaMeting(songId, 'netease')) || (await fetchNetEaseSongLegacy(songId))
+
+    // 关键：网易云对 VIP/版权受限歌曲，outer/url 实际返回 HTML 错误页而不是音频。
+    // 主动 HEAD 探测确认是 HTML 时，把 url 标记为 'unavailable'，前端会跳过这首。
+    if (result && !result.error && result.url && result.url.includes('music.163.com')) {
+      const probed = await probeAndMarkUnavailable(result.url)
+      if (probed.unavailable) {
+        return { ...result, url: 'unavailable', error: 'unavailable' }
+      }
+    }
 
     // 成功结果才缓存，失败不缓存（便于限流解除后重试）
     if (!result.error) {

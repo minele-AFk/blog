@@ -270,7 +270,9 @@ async function fetchSongWithFallback(songRef: SongRef, signal?: AbortSignal): Pr
 
   const allSources = [
     { id: songRef.id, source: songRef.source },
-    ...(songRef.alt || []),
+    // 只保留 local 类型的 alt（VIP 歌曲走本地 mp3 替代），其他跨源 alt 已弃用
+    // （QQ ws.stream 已 403，Meting 公共跳板 api.injahow.cn 不稳定）
+    ...(songRef.alt || []).filter((a) => a.source === 'local'),
   ];
 
   const urls: string[] = [];
@@ -284,38 +286,42 @@ async function fetchSongWithFallback(songRef: SongRef, signal?: AbortSignal): Pr
       localUrl = altUrl;
       continue;
     }
-    
+
     try {
       // 修复1：添加 5 秒超时，防止某个来源卡住整个歌单加载
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
-      
+
       // 支持外部取消信号（修复：使用 cleanup 避免内存泄漏）
       let onAbort: (() => void) | null = null;
       if (signal) {
         onAbort = () => controller.abort();
         signal.addEventListener('abort', onAbort, { once: true });
       }
-      
-      const res = await fetch(`/api/music?ids=${id}&source=${source}`, { 
-        signal: controller.signal 
+
+      const res = await fetch(`/api/music?ids=${id}&source=${source}`, {
+        signal: controller.signal,
       });
       clearTimeout(timeoutId);
-      
+
       // 清理外部信号监听
       if (signal && onAbort) {
         signal.removeEventListener('abort', onAbort);
       }
-      
+
       if (!res.ok) continue;
       const data = await res.json();
       const songData = data?.[0];
-      if (songData && !songData.error && songData.url) {
+      // 关键：歌曲标记为 unavailable（HTML 响应、VIP、版权受限）时直接丢弃，不进入 urls 数组
+      if (songData && !songData.error && songData.url && songData.url !== 'unavailable') {
         urls.push(songData.url);
         if (!merged) {
           parsedLyrics = parseLyrics(songData.lrc);
           merged = songData;
         }
+      } else if (songData?.error === 'unavailable') {
+        // 主源不可用（VIP/版权），整首歌不可用，让外层 nextSong 跳过
+        return null;
       }
     } catch {
       // 单个来源失败，继续尝试下一个
@@ -620,20 +626,26 @@ const toPlayableUrl = (url: string): string => {
     setIsSwitchingSource(false);
   };
 
-  // ------- 音频错误处理：自动切换下一个来源 -------
+  // ------- 音频错误处理：自动跳过当前无法播放的歌曲 -------
+  // 历史逻辑：尝试 urls 数组里下一个 alt 来源（QQ 音乐、Meting 跳板等）。但这些源要么 403
+  // （QQ ws.stream 已死）要么上游挂掉（api.injahow.cn 公共 Meting 经常挂），导致循环切坏链
+  // 仍无法播放。新逻辑：当前主源失败就提示并自动下一首。
   const fallbackToNextUrl = () => {
-    const song = playlist[currentIndex];
-    if (!song || !song.urls || currentUrlIdx >= song.urls.length - 1) {
-      // 所有来源都已用完
+    if (audioRef.current) {
       setIsPlaying(false);
       setIsSwitchingSource(false);
-      setError(`「${song?.title || '当前歌曲'}」的所有来源均无法播放`);
-      return;
+      setError(`「${playlist[currentIndex]?.title || '当前歌曲'}」无法播放，自动跳到下一首`);
+      // 短暂显示错误文案后自动跳到下一首
+      setTimeout(() => {
+        if (playlist.length > 0) {
+          setCurrentIndex((currentIndex + 1) % playlist.length);
+          setCurrentUrlIdx(0);
+          setCurrentTime(0);
+          setProgress(0);
+          setError('');
+        }
+      }, 1500);
     }
-    // 修复2：设置加载状态，UI 可以显示切换中
-    setIsSwitchingSource(true);
-    setCurrentUrlIdx(prev => prev + 1);
-    setError(`正在尝试替代音频源...`);
   };
 
   const handleTimeUpdate = () => {
