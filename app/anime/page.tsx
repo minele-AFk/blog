@@ -52,11 +52,11 @@ export default function AnimePage() {
         setAnimeList(result.data);
         setLastSync(result.meta?.lastSync || null);
         setConfigReady(result.meta?.configReady ?? true);
-        
-        // 如果正在同步中，轮询等待同步完成
-        if (result.meta?.syncing || result.meta?.expired) {
-          setBackgroundSyncing(true);
-          pollUntilSyncComplete();
+
+        // 过期时只提示管理员可手动同步，不阻塞页面渲染、不在前端触发拉取
+        // 同步逻辑只在 /api/anime/sync（管理员手动）或 cron 中执行
+        if (result.meta?.expired) {
+          setBackgroundSyncing(false);
         }
       } else {
         setError(result.error || '加载失败');

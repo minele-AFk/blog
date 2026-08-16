@@ -3,7 +3,7 @@ import { verifyToken } from '../../../../lib/auth';
 import { getProjects, addProject, updateProject, deleteProject as removeProject } from '../../../../lib/json-store';
 
 export async function GET() {
-  const projects = getProjects();
+  const projects = await getProjects();
   return NextResponse.json({ success: true, data: projects });
 }
 

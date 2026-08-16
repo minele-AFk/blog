@@ -56,8 +56,15 @@ export default function ProjectsPage() {
   const fetchProjects = async () => {
     try {
       const res = await fetch('/api/admin/projects');
+      if (!res.ok) {
+        // 非 200 时直接当成空数据（不抛错），避免客户端 .map 在非数组上报错
+        setProjects([]);
+        return;
+      }
       const data = await res.json();
-      setProjects(data.data || []);
+      // 兼容 { success, data: [...] } 与直接返回数组两种格式
+      const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+      setProjects(list);
     } catch {
       setProjects([]);
     } finally {
