@@ -11,5 +11,35 @@
   },
   "observability": {
     "enabled": true
+  },
+  // 业务数据存储：Workers 无持久磁盘，data/*.json 与后台发文改存 KV
+  "kv_namespaces": [
+    {
+      "binding": "BLOG_DATA",
+      "id": "5f9c97b54cb740658dd8089ee897978a"
+    }
+  ],
+  // 图片上传存储：⚠️ 当前账户未启用 R2，bucket 不存在会导致 wrangler deploy 失败，
+  // 故暂时注释。启用 R2 后执行 `npx wrangler r2 bucket create blog-uploads` 并恢复以下配置：
+  // "r2_buckets": [
+  //   {
+  //     "binding": "BLOG_UPLOADS",
+  //     "bucket_name": "blog-uploads"
+  //   }
+  // ],
+  // 定时任务：追番每日同步（原 vercel.json crons 迁移到 Workers）
+  "triggers": {
+    "crons": [
+      {
+        "cron": "0 0 * * *",
+        "path": "/api/anime/cron"
+      }
+    ]
+  },
+  // 公开变量（secrets 如 JWT_SECRET / ADMIN_PASSWORD / BANGUMI_TOKEN / CRON_SECRET
+  // 请在 Cloudflare Dashboard -> Workers -> blog -> Settings -> Variables 中配置）
+  "vars": {
+    // 站点真实域名（用于 OG 等绝对 URL）；请替换为你绑定的自定义域名
+    "NEXT_PUBLIC_SITE_URL": "https://blog.1653500384.workers.dev"
   }
 }

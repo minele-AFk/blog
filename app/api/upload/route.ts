@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeFile, mkdir, readdir, stat } from 'fs/promises';
 import path from 'path';
 import { verifyToken } from '../../../lib/auth';
+import { isCloudflare, r2Put } from '../../../lib/storage';
 
-// ---- 上传总量限制，防止磁盘被塞满 ----
+// ---- 上传总量限制（本地 fs 模式），防止磁盘被塞满 ----
 const MAX_FILES = 500; // uploads 目录最多文件数
 const MAX_TOTAL_SIZE = 200 * 1024 * 1024; // 总大小上限 200MB
 
@@ -88,18 +89,6 @@ export async function POST(request: NextRequest) {
     }
 
     const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-    await mkdir(uploadDir, { recursive: true });
-
-    // 总量限制：文件数与总大小
-    const { files, totalSize } = await getUploadStats(uploadDir);
-    if (files >= MAX_FILES) {
-      return NextResponse.json({ error: `图片数量已达上限（${MAX_FILES} 张），请先在管理后台清理` }, { status: 400 });
-    }
-    if (totalSize + buffer.length > MAX_TOTAL_SIZE) {
-      return NextResponse.json({ error: '图片总大小已达上限（200MB），请先在管理后台清理' }, { status: 400 });
-    }
-
-    // 生成唯一文件名（扩展名从 MIME 类型映射，避免无扩展名/非法扩展名导致图库不可见）
     const extMap: Record<string, string> = {
       'image/jpeg': 'jpg',
       'image/png': 'png',
@@ -110,7 +99,31 @@ export async function POST(request: NextRequest) {
     };
     const ext = extMap[file.type] || 'jpg';
     const filename = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${ext}`;
-    
+
+    // Workers：写入 R2（无磁盘）；本地：写入 public/uploads
+    if (isCloudflare()) {
+      const ok = await r2Put(filename, buffer, file.type);
+      if (!ok) {
+        return NextResponse.json({ error: '上传失败（R2 写入错误）' }, { status: 500 });
+      }
+      return NextResponse.json({
+        success: true,
+        url: `/uploads/${filename}`,
+        message: '上传成功',
+      });
+    }
+
+    await mkdir(uploadDir, { recursive: true });
+
+    // 总量限制（本地模式）：文件数与总大小
+    const { files, totalSize } = await getUploadStats(uploadDir);
+    if (files >= MAX_FILES) {
+      return NextResponse.json({ error: `图片数量已达上限（${MAX_FILES} 张），请先在管理后台清理` }, { status: 400 });
+    }
+    if (totalSize + buffer.length > MAX_TOTAL_SIZE) {
+      return NextResponse.json({ error: '图片总大小已达上限（200MB），请先在管理后台清理' }, { status: 400 });
+    }
+
     const filePath = path.join(uploadDir, filename);
     await writeFile(filePath, buffer);
 

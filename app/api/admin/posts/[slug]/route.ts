@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '../../../../../lib/auth';
 import { isValidSlug } from '../../../../../lib/slug';
+import { savePostToKv, deletePostFromKv, postExistsInKv } from '../../../../../lib/posts';
+import { isCloudflare } from '../../../../../lib/storage';
 import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
@@ -27,7 +29,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
   const filePath = resolvedPath;
 
-  if (!fs.existsSync(filePath)) {
+  // 文章存在性检查（Workers 查 KV，本地查 fs）
+  const existsInFs = !isCloudflare() && fs.existsSync(filePath);
+  if (!existsInFs && !(await postExistsInKv(slug))) {
     return NextResponse.json({ error: '文章不存在' }, { status: 404 });
   }
 
@@ -42,7 +46,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   };
 
   const fileContent = matter.stringify(content || '', frontmatter);
-  fs.writeFileSync(filePath, fileContent);
+
+  // Workers 无磁盘：写入 KV；本地：写入 posts/*.md
+  if (isCloudflare()) {
+    await savePostToKv(slug, fileContent);
+  } else {
+    fs.writeFileSync(filePath, fileContent);
+  }
 
   return NextResponse.json({ success: true, data: { slug, ...frontmatter } });
 }
@@ -66,10 +76,17 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
   }
   const filePath = resolvedPath;
 
-  if (!fs.existsSync(filePath)) {
+  // 存在性检查（Workers 查 KV，本地查 fs）
+  const existsInFs = !isCloudflare() && fs.existsSync(filePath);
+  if (!existsInFs && !(await postExistsInKv(slug))) {
     return NextResponse.json({ error: '文章不存在' }, { status: 404 });
   }
 
-  fs.unlinkSync(filePath);
+  // Workers 无磁盘：删除 KV；本地：删除 posts/*.md
+  if (isCloudflare()) {
+    await deletePostFromKv(slug);
+  } else {
+    fs.unlinkSync(filePath);
+  }
   return NextResponse.json({ success: true });
 }

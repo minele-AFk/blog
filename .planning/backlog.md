@@ -16,7 +16,7 @@
 | F3 | **评论系统** | 集成第三方（如 Giscus / Waline），或自建 | ⬜ |
 | F4 | **阅读统计** | 文章浏览量统计（本地 JSON 存储） | ⬜ |
 | F5 | **文章内容填充** | 9 篇文章（3 篇原有 + 6 篇新增），覆盖技术/动漫/生活三类 ✅ | ✅ 已完成（v0.6.8） |
-| F6 | **线上部署验证** | 目前仅本地 dev；GitHub Pages workflow 已删除（未配置静态导出），需确定部署方案（Vercel/自建/重新配置 GH Pages） | ⬜ |
+| F6 | **线上部署验证** | 已部署 Cloudflare Workers（2026-08-15）：`https://blog.1653500384.workers.dev`，首页/文章页海外验证 200，国内已绑定正常域名可访问 ✅ | ✅ 已完成（2026-08-15，Cloudflare Workers + 自定义域名） |
 | F7 | **文章 TOC** | 里程碑曾标记"目录导航 ✅"，如需完善侧边目录可复查 | ⬜ |
 | F8 | **图片懒加载补全** | 全项目 15 处 `<img>` 均已补 `loading="lazy"` ✅ | ✅ 已完成（v0.6.5） |
 | F9 | **点赞/互动** | 文章点赞、分享等互动（需求待定） | ⬜ |
@@ -65,6 +65,49 @@
 - v0.6.2 图片上传与安全加固：见 `checklist.md` 第十二阶段与 `PRD.md` 更新记录
 - v0.6.3 健壮性与数据驱动优化：见 `checklist.md` 第十三阶段（M6.7）与 `PRD.md` 更新记录
 - v0.6.4 管理员体验与追番性能优化：见 `checklist.md` 第十四阶段（M6.8）与 `PRD.md` 更新记录
+
+---
+
+## 五、Cloudflare Workers 部署遗留问题（2026-08-15 记录，待处理）
+
+> 背景：博客已上线 Cloudflare Workers（构建命令 `npm run build:cf` → 生成静态文章数据 + OpenNext bundle）。
+> Workers 无持久磁盘、无 cron（需改 triggers），以下问题均为"先上线、改造后置"策略下的遗留项，按优先级排列。
+
+### P1 数据未上线（页面显示为空）
+
+| # | 问题 | 影响 | 状态 |
+|---|------|------|------|
+| D1 | `data/*.json`（moments/projects/friends/anime 等）按隐私决定**未提交 GitHub**，云端无数据 | 首页"0项目/0说说"；说说/友链/项目/追番页面全空 | ✅ 已迁移 KV（`data:` 前缀）并导入全部数据（2026-08-16） |
+| D2 | 文章数据来自构建时快照（`lib/generated/posts-data.ts`），**新增文章需重新构建部署**才生效 | 后台发文 → 构建 → 部署的流程待定 | ✅ 后台发文已改 KV（`post:index` + `post:{slug}`），发文即时生效，无需重建（2026-08-16） |
+
+### P2 Workers 上不可用的动态功能（fs 写操作）
+
+| # | 位置 | 问题 | 状态 |
+|---|------|------|------|
+| D3 | `app/api/admin/posts/route.ts`、`app/api/admin/posts/[slug]/route.ts` | 发布/编辑文章用 `fs` 写 `posts/*.md` → Workers 无磁盘，**后台发文不可用** | ✅ 已改 KV 双模式（2026-08-16） |
+| D4 | `lib/json-store.ts`（写入函数）+ 对应 admin API | 说说/项目/友链的增删改写 JSON → 同上，**后台管理不可用** | ✅ 已改 KV 双模式（2026-08-16） |
+| D5 | `app/api/upload/route.ts` | 图片上传写 `public/uploads/` → 无磁盘，**上传不可用** | 🔶 代码已改 R2 双模式 + `/uploads` 读取路由，**待账户启用 R2 后创建 `blog-uploads` bucket** |
+| D6 | `lib/music-cache.ts` | 音乐元数据磁盘缓存 → 无磁盘，缓存失效（每次冷请求，Meting 主通道仍可用，仅性能损失） | ✅ 已改 KV（`music:` 前缀）（2026-08-16） |
+
+### P3 配置类
+
+| # | 问题 | 状态 |
+|---|------|------|
+| D7 | **环境变量未在 Cloudflare 配置**：`JWT_SECRET`、`ADMIN_PASSWORD`、`BANGUMI_TOKEN`、`CRON_SECRET`、`ADMIN_TOKEN`（真实值在本地 `.env`，未提交） | ✅ 已配置 4 个 secrets（JWT_SECRET/BANGUMI_TOKEN 复用 `.env`，CRON_SECRET/ADMIN_TOKEN 新生成）；ADMIN_PASSWORD 无需配置（KV 已存密码哈希）（2026-08-16） |
+| D8 | **cron 未迁移**：追番每日同步原在 `vercel.json`，Workers 需改为 `triggers.crons` | ✅ 已迁移 wrangler `triggers.crons`（`0 0 * * *` → `/api/anime/cron`），路由兼容 CF 调度 UA（2026-08-16） |
+| D9 | **站点 URL 仍是占位符**：`app/layout.tsx` 的 `NEXT_PUBLIC_SITE_URL` 未配置，og:url 等输出 `xizi-duo-qiu.example.com`；配置真实域名后需处理（Q3 同源） | ✅ 已配置 `vars.NEXT_PUBLIC_SITE_URL` = 当前 workers.dev 域名；绑定自定义域名后需同步更新（2026-08-16） |
+
+### P4 工程/安全
+
+| # | 问题 | 状态 |
+|---|------|------|
+| D10 | **GitHub PAT 已暴露**（对话中明文出现，`ghp_` 开头） | ✅ 已核实：PAT 未出现在任何项目文件中（仅 Trae MCP GitHub 工具配置），用户决定不处理（2026-08-16） |
+| D11 | 本地 Windows 无法跑 `npm run build:cf`（OpenNext 崩溃，0xC0000409），只能云端构建或 WSL | ✅ 记录即可，改开发机时注意（2026-08-16） |
+| D12 | 追番数据（`data/anime.json`）为运行时缓存且未提交，追番页无数据 | ✅ 已导入 KV（`data:anime.json`，2026-08-16） |
+
+### 处理建议顺序
+
+1. D10（安全，先撤销 PAT）→ 2. D7（配环境变量）→ 3. D1+D4（KV 改造 + 数据导入，恢复说说/友链/项目）→ 4. D3/D5（发文/上传改 R2）→ 5. D8（cron）→ 6. D2/D9（数据流与域名收尾）
 
 ---
 

@@ -9,8 +9,8 @@ export const dynamic = 'force-dynamic';
 export default async function Home() {
   const [posts, projects, moments] = await Promise.all([
     getPosts(),
-    Promise.resolve(getProjects()),
-    Promise.resolve(getMoments()),
+    getProjects(),
+    getMoments(),
   ]);
 
   const recentPosts = posts.slice(0, 6);

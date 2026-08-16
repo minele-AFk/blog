@@ -3,8 +3,16 @@ import path from 'path';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import { isCloudflare, kvGetJson, kvSetJson } from './storage';
 
 const ADMIN_DATA_PATH = path.join(process.cwd(), 'data', 'admin.json');
+// KV 中的 key（与 json-store 的 data: 前缀保持一致，便于统一导入）
+const ADMIN_KV_KEY = 'data:admin.json';
+
+interface AdminData {
+  passwordHash?: string;
+  createdAt?: string;
+}
 
 // 开发环境未配置 JWT_SECRET 时的缓存随机密钥（模块级，仅生成一次）
 let cachedDevSecret: string | null = null;
@@ -45,33 +53,47 @@ export const generateToken = () => {
   return jwt.sign({ userId: 'admin' }, getJwtSecret(), { expiresIn: '24h' });
 };
 
-export const getAdminPasswordHash = (): string | null => {
+// 读取管理员数据（Workers 用 KV，本地用 fs）
+const getAdminData = async (): Promise<AdminData | null> => {
+  if (isCloudflare()) {
+    return await kvGetJson<AdminData>(ADMIN_KV_KEY);
+  }
   if (!fs.existsSync(ADMIN_DATA_PATH)) {
     return null;
   }
-
   try {
-    const data = JSON.parse(fs.readFileSync(ADMIN_DATA_PATH, 'utf8'));
-    return typeof data.passwordHash === 'string' ? data.passwordHash : null;
+    const content = fs.readFileSync(ADMIN_DATA_PATH, 'utf8');
+    return JSON.parse(content);
   } catch {
     return null;
   }
 };
 
-export const setAdminPassword = (password: string) => {
-  const passwordHash = bcrypt.hashSync(password, 10);
-
-  const data = {
-    passwordHash,
-    createdAt: new Date().toISOString(),
-  };
-
+const saveAdminData = async (data: AdminData): Promise<void> => {
+  if (isCloudflare()) {
+    await kvSetJson(ADMIN_KV_KEY, data);
+    return;
+  }
   fs.mkdirSync(path.dirname(ADMIN_DATA_PATH), { recursive: true });
   fs.writeFileSync(ADMIN_DATA_PATH, JSON.stringify(data, null, 2));
 };
 
-export const verifyPassword = (password: string) => {
-  const passwordHash = getAdminPasswordHash();
+export const getAdminPasswordHash = async (): Promise<string | null> => {
+  const data = await getAdminData();
+  return typeof data?.passwordHash === 'string' ? data.passwordHash : null;
+};
+
+export const setAdminPassword = async (password: string) => {
+  const passwordHash = bcrypt.hashSync(password, 10);
+  const data: AdminData = {
+    passwordHash,
+    createdAt: new Date().toISOString(),
+  };
+  await saveAdminData(data);
+};
+
+export const verifyPassword = async (password: string) => {
+  const passwordHash = await getAdminPasswordHash();
   if (!passwordHash) return false;
 
   try {
@@ -81,19 +103,19 @@ export const verifyPassword = (password: string) => {
   }
 };
 
-export const hasAdminPassword = () => {
-  return getAdminPasswordHash() !== null;
+export const hasAdminPassword = async () => {
+  return (await getAdminPasswordHash()) !== null;
 };
 
 /**
  * 未初始化管理员密码时，若配置了 ADMIN_PASSWORD 环境变量则自动初始化。
  * @returns true=已通过环境变量初始化；false=无需初始化或未配置环境变量
  */
-export const initializeAdminIfNeeded = () => {
-  if (hasAdminPassword()) return false;
+export const initializeAdminIfNeeded = async () => {
+  if (await hasAdminPassword()) return false;
   if (!process.env.ADMIN_PASSWORD) return false;
 
-  setAdminPassword(process.env.ADMIN_PASSWORD);
+  await setAdminPassword(process.env.ADMIN_PASSWORD);
   console.log('✅ 已通过 ADMIN_PASSWORD 环境变量初始化管理员密码。');
   return true;
 };

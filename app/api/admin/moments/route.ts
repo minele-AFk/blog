@@ -3,7 +3,7 @@ import { verifyToken } from '../../../../lib/auth';
 import { getMoments, addMoment, updateMoment, deleteMoment as removeMoment } from '../../../../lib/json-store';
 
 export async function GET() {
-  const moments = getMoments();
+  const moments = await getMoments();
   return NextResponse.json({ success: true, data: moments });
 }
 
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '内容不能为空' }, { status: 400 });
   }
 
-  const newMoment = addMoment({
+  const newMoment = await addMoment({
     content,
     date: date || new Date().toISOString().split('T')[0],
     likes,
@@ -48,7 +48,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'ID不能为空' }, { status: 400 });
   }
 
-  const updatedMoment = updateMoment(id, updates);
+  const updatedMoment = await updateMoment(id, updates);
   
   if (!updatedMoment) {
     return NextResponse.json({ error: '说说不存在' }, { status: 404 });
@@ -72,7 +72,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'ID不能为空' }, { status: 400 });
   }
 
-  const deleted = removeMoment(id);
+  const deleted = await removeMoment(id);
   
   if (!deleted) {
     return NextResponse.json({ error: '说说不存在' }, { status: 404 });

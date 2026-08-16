@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readdir, stat, unlink } from 'fs/promises';
 import path from 'path';
 import { verifyToken } from '../../../../lib/auth';
+import { isCloudflare, r2List, r2Delete } from '../../../../lib/storage';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads');
 const ALLOWED_EXT = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.avif'];
@@ -27,6 +28,23 @@ export async function GET(request: NextRequest) {
   if (!checkAuth(request)) return unauthorized();
 
   try {
+    // Workers：从 R2 列出（无磁盘）
+    if (isCloudflare()) {
+      const objects = await r2List();
+      const files = objects
+        .filter((obj) => ALLOWED_EXT.includes(path.extname(obj.key).toLowerCase()))
+        .map((obj) => ({
+          name: obj.key,
+          size: obj.size,
+          modifiedAt: obj.uploads?.toISOString?.() ?? new Date(0).toISOString(),
+          url: `/uploads/${obj.key}`,
+        }))
+        .sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
+      const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+      return NextResponse.json({ success: true, files, totalCount: files.length, totalSize });
+    }
+
+    // 本地：遍历 public/uploads
     let files: { name: string; size: number; modifiedAt: string; url: string }[] = [];
     try {
       const entries = await readdir(UPLOAD_DIR, { withFileTypes: true });
@@ -69,6 +87,15 @@ export async function DELETE(request: NextRequest) {
 
     if (!isValidFilename(filename)) {
       return NextResponse.json({ error: '非法文件名' }, { status: 400 });
+    }
+
+    // Workers：删除 R2 对象；本地：删除文件
+    if (isCloudflare()) {
+      const ok = await r2Delete(filename);
+      if (!ok) {
+        return NextResponse.json({ error: '删除失败，文件可能不存在' }, { status: 404 });
+      }
+      return NextResponse.json({ success: true, message: '删除成功' });
     }
 
     const filePath = path.join(UPLOAD_DIR, filename);

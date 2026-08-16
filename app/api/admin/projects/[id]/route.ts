@@ -12,7 +12,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   const body = await request.json();
-  const updated = updateProject(id, body);
+  const updated = await updateProject(id, body);
 
   if (!updated) {
     return NextResponse.json({ error: '项目不存在' }, { status: 404 });
@@ -30,7 +30,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     return NextResponse.json({ error: '未授权' }, { status: 401 });
   }
 
-  const success = deleteProject(id);
+  const success = await deleteProject(id);
 
   if (!success) {
     return NextResponse.json({ error: '项目不存在' }, { status: 404 });

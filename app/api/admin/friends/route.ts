@@ -3,7 +3,7 @@ import { verifyToken } from '../../../../lib/auth';
 import { getFriends, addFriend, updateFriend, deleteFriend as removeFriend } from '../../../../lib/json-store';
 
 export async function GET() {
-  const friends = getFriends();
+  const friends = await getFriends();
   return NextResponse.json({ success: true, data: friends });
 }
 
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '名称和链接地址不能为空' }, { status: 400 });
   }
 
-  const newFriend = addFriend({
+  const newFriend = await addFriend({
     name,
     avatar: avatar || '',
     description: description || '',
@@ -48,7 +48,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'ID不能为空' }, { status: 400 });
   }
 
-  const updatedFriend = updateFriend(id, updates);
+  const updatedFriend = await updateFriend(id, updates);
   
   if (!updatedFriend) {
     return NextResponse.json({ error: '友链不存在' }, { status: 404 });
@@ -72,7 +72,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'ID不能为空' }, { status: 400 });
   }
 
-  const deleted = removeFriend(id);
+  const deleted = await removeFriend(id);
   
   if (!deleted) {
     return NextResponse.json({ error: '友链不存在' }, { status: 404 });

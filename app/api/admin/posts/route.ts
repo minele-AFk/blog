@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '../../../../lib/auth';
-import { getPosts } from '../../../../lib/posts';
+import { getPosts, savePostToKv, postExistsInKv } from '../../../../lib/posts';
 import { isValidSlug } from '../../../../lib/slug';
 import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
+import { isCloudflare } from '../../../../lib/storage';
 
 export async function GET() {
   const posts = await getPosts();
@@ -49,14 +50,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error }, { status: 400 });
   }
   const postsDirectory = path.join(process.cwd(), 'posts');
-  
-  if (!fs.existsSync(postsDirectory)) {
-    fs.mkdirSync(postsDirectory, { recursive: true });
-  }
+  const targetPath = path.join(postsDirectory, `${postSlug}.md`);
 
   // 防止静默覆盖已有文章（重名 slug 返回冲突，前端提示走编辑）
-  const targetPath = path.join(postsDirectory, `${postSlug}.md`);
-  if (fs.existsSync(targetPath)) {
+  const existsInFs = !isCloudflare() && fs.existsSync(targetPath);
+  if (existsInFs || (await postExistsInKv(postSlug))) {
     return NextResponse.json(
       { error: `slug「${postSlug}」已存在，请修改 slug 或直接编辑该文章` },
       { status: 409 }
@@ -74,7 +72,16 @@ export async function POST(request: NextRequest) {
   };
 
   const fileContent = matter.stringify(content, frontmatter);
-  fs.writeFileSync(targetPath, fileContent);
+
+  // Workers 无磁盘：写入 KV；本地：写入 posts/*.md
+  if (isCloudflare()) {
+    await savePostToKv(postSlug, fileContent);
+  } else {
+    if (!fs.existsSync(postsDirectory)) {
+      fs.mkdirSync(postsDirectory, { recursive: true });
+    }
+    fs.writeFileSync(targetPath, fileContent);
+  }
 
   return NextResponse.json({ success: true, data: { slug: postSlug, ...frontmatter } }, { status: 201 });
 }

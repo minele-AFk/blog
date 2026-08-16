@@ -76,9 +76,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '密码不能为空' }, { status: 400 });
   }
 
-  if (!hasAdminPassword()) {
+  if (!(await hasAdminPassword())) {
     // 未初始化：仅允许通过 ADMIN_PASSWORD 环境变量初始化，拒绝匿名抢注
-    const initialized = initializeAdminIfNeeded();
+    const initialized = await initializeAdminIfNeeded();
     if (!initialized) {
       return NextResponse.json(
         { error: '管理员尚未初始化：请在服务器配置 ADMIN_PASSWORD 环境变量后重启，或联系部署者完成初始化' },
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       );
     }
     // 已初始化，输入的密码必须与 ADMIN_PASSWORD 一致才发放 token
-    if (!verifyPassword(password)) {
+    if (!(await verifyPassword(password))) {
       recordFailure(ip);
       return NextResponse.json({ error: '密码错误' }, { status: 401 });
     }
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  if (!verifyPassword(password)) {
+  if (!(await verifyPassword(password))) {
     recordFailure(ip);
     return NextResponse.json({ error: '密码错误' }, { status: 401 });
   }
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
-  const hasPassword = hasAdminPassword();
+  const hasPassword = await hasAdminPassword();
   // initializable: 尚未初始化且已配置 ADMIN_PASSWORD 环境变量（前端据此提示可输入密码完成初始化）
   const initializable = !hasPassword && !!process.env.ADMIN_PASSWORD;
   return NextResponse.json({ hasPassword, initializable });

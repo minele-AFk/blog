@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '名称和描述不能为空' }, { status: 400 });
   }
 
-  const newProject = addProject({
+  const newProject = await addProject({
     name,
     description,
     tags: tags || [],
@@ -51,7 +51,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'ID不能为空' }, { status: 400 });
   }
 
-  const updatedProject = updateProject(id, updates);
+  const updatedProject = await updateProject(id, updates);
   
   if (!updatedProject) {
     return NextResponse.json({ error: '项目不存在' }, { status: 404 });
@@ -75,7 +75,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'ID不能为空' }, { status: 400 });
   }
 
-  const deleted = removeProject(id);
+  const deleted = await removeProject(id);
   
   if (!deleted) {
     return NextResponse.json({ error: '项目不存在' }, { status: 404 });

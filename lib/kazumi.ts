@@ -1,4 +1,5 @@
 import { Anime, AnimeStatus } from './types';
+import { isCloudflare, kvGetJson, kvSetJson } from './storage';
 
 const BANGUMI_API = 'https://api.bgmapi.com';
 const BANGUMI_TOKEN = process.env.BANGUMI_TOKEN || '';
@@ -161,8 +162,14 @@ interface AnimeCache {
   lastSync: number; // 时间戳
 }
 
-// 读取缓存
+// KV 中的 key（与 json-store 的 data: 前缀保持一致，便于统一导入）
+const ANIME_KV_KEY = 'data:anime.json';
+
+// 读取缓存（Workers 用 KV，本地用 fs）
 async function getCache(): Promise<AnimeCache | null> {
+  if (isCloudflare()) {
+    return await kvGetJson<AnimeCache>(ANIME_KV_KEY);
+  }
   const fs = await import('fs/promises');
   const path = await import('path');
   const cachePath = path.join(process.cwd(), 'data', 'anime.json');
@@ -174,17 +181,21 @@ async function getCache(): Promise<AnimeCache | null> {
   }
 }
 
-// 保存缓存
+// 保存缓存（Workers 用 KV，本地用 fs）
 async function setCache(animeList: Anime[]): Promise<void> {
+  const cache: AnimeCache = {
+    data: animeList,
+    lastSync: Date.now(),
+  };
+  if (isCloudflare()) {
+    await kvSetJson(ANIME_KV_KEY, cache);
+    return;
+  }
   const fs = await import('fs/promises');
   const path = await import('path');
   const dataDir = path.join(process.cwd(), 'data');
   await fs.mkdir(dataDir, { recursive: true });
   const cachePath = path.join(dataDir, 'anime.json');
-  const cache: AnimeCache = {
-    data: animeList,
-    lastSync: Date.now(),
-  };
   await fs.writeFile(cachePath, JSON.stringify(cache, null, 2));
 }
 

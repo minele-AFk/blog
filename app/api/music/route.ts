@@ -251,8 +251,8 @@ export async function GET(request: NextRequest) {
   // 并发限制为 3：防止一次歌单批量请求打爆第三方接口触发限流
   const fetchOne = async (songId: string): Promise<SongResult> => {
     const cacheKey = `${source}:${songId}`
-    const cached = getMusicCache<SongResult>(cacheKey)
-    if (cached && Date.now() - getMusicCacheTs(cacheKey) < CACHE_TTL_MS) {
+    const cached = await getMusicCache<SongResult>(cacheKey)
+    if (cached && Date.now() - (await getMusicCacheTs(cacheKey)) < CACHE_TTL_MS) {
       return cached
     }
 
@@ -263,7 +263,7 @@ export async function GET(request: NextRequest) {
 
     // 成功结果才缓存，失败不缓存（便于限流解除后重试）
     if (!result.error) {
-      setMusicCache(cacheKey, result)
+      await setMusicCache(cacheKey, result)
     }
     return result
   }
