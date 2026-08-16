@@ -172,6 +172,14 @@ export default function ProjectsPage() {
     }
   };
 
+  const handleProjectClick = (project: Project) => {
+    // 点击卡片主体：优先打开演示链接，没有则打开 GitHub 链接
+    const url = project.demo || project.github;
+    if (url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   const handleSave = async () => {
     setModalLoading(true);
     try {
@@ -273,10 +281,12 @@ export default function ProjectsPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: 0.2 + index * 0.1 }}
                 whileHover={{ y: -4 }}
-                className={`glass-card neon-border p-6 group relative cursor-move ${
+                className={`glass-card neon-border p-6 group relative cursor-pointer ${
                   draggedIndex === index ? 'opacity-50 scale-95' : ''
                 } ${dragOverIndex === index ? 'ring-2 ring-purple-500' : ''}`}
                 draggable={isAuthenticated}
+                onClick={() => handleProjectClick(project)}
+                title={project.demo || project.github ? `打开 ${project.demo || project.github}` : project.name}
                 onDragStart={(e) => handleDragStart(e, index)}
                 onDragOver={(e) => handleDragOver(e, index)}
                 onDragLeave={handleDragLeave}
