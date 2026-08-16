@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, AlertCircle, Clock } from 'lucide-react';
 import { Anime, AnimeStatus } from '@/lib/types';
@@ -29,7 +29,16 @@ export default function AnimePage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<AnimeStatus>('watching');
+  // 初始化 tab：优先从 URL 查询参数读取，进入详情页返回后仍保持原分类
+  const [activeTab, setActiveTab] = useState<AnimeStatus>(() => {
+    if (typeof window !== 'undefined') {
+      const tab = new URLSearchParams(window.location.search).get('tab');
+      if (tab && STATUS_TABS.some((s) => s.key === tab)) {
+        return tab as AnimeStatus;
+      }
+    }
+    return 'watching';
+  });
   const [isAdmin, setIsAdmin] = useState(false);
   const [lastSync, setLastSync] = useState<number | null>(null);
   const [backgroundSyncing, setBackgroundSyncing] = useState(false);
@@ -112,6 +121,22 @@ export default function AnimePage() {
     loadData();
   }, [loadData]);
 
+  // 返回列表时恢复进入详情页前的滚动位置（位置由 AnimeCard 点击时写入 sessionStorage）
+  const scrollRestored = useRef(false);
+  useEffect(() => {
+    if (loading || animeList.length === 0 || scrollRestored.current) return;
+    scrollRestored.current = true;
+    const saved = sessionStorage.getItem('anime_scroll_pos');
+    if (saved) {
+      const pos = parseInt(saved, 10);
+      if (!isNaN(pos)) {
+        // 等列表渲染完成后再滚动，否则高度未撑开会滚不到位
+        requestAnimationFrame(() => window.scrollTo(0, pos));
+      }
+      sessionStorage.removeItem('anime_scroll_pos');
+    }
+  }, [loading, animeList]);
+
   // 同步数据
   const handleSync = async () => {
     try {
@@ -139,6 +164,14 @@ export default function AnimePage() {
     } finally {
       setSyncing(false);
     }
+  };
+
+  // 切换分类：更新状态并同步到 URL 查询参数，保证返回/刷新时保持
+  const handleTabChange = (key: AnimeStatus) => {
+    setActiveTab(key);
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', key);
+    window.history.replaceState(null, '', url.toString());
   };
 
   // 过滤数据
@@ -246,7 +279,7 @@ export default function AnimePage() {
         {STATUS_TABS.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => handleTabChange(tab.key)}
             className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 whitespace-nowrap ${
               activeTab === tab.key
                 ? 'bg-purple-600 text-white shadow-md shadow-purple-500/25 dark:shadow-purple-500/15'

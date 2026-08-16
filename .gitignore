@@ -45,6 +45,7 @@ data/projects.json
 data/anime-detail-cache.json
 data/anime.json
 data/music-cache.json
+data/cover-cache/
 
 # vercel
 .vercel
@@ -69,5 +70,9 @@ next-env.d.ts
 .idea/
 *.swp
 *.swo
+
+# AI agent 自动生成文件
+AGENTS.md
+CLAUDE.md
 
 

@@ -35,7 +35,11 @@ export default function AnimeCard({ anime }: AnimeCardProps) {
       className="group relative rounded-2xl overflow-hidden bg-white/5 border border-white/10 backdrop-blur-sm transition-all hover:border-purple-500/30 hover:shadow-lg hover:shadow-purple-500/10 cursor-pointer"
     >
       {/* 整卡链接到详情页 */}
-      <Link href={`/anime/${anime.id}`} className="block">
+      <Link
+        href={`/anime/${anime.id}`}
+        className="block"
+        onClick={() => sessionStorage.setItem('anime_scroll_pos', String(window.scrollY))}
+      >
         {/* 封面 */}
         <div className="relative aspect-[3/4] overflow-hidden bg-white/5">
           <img

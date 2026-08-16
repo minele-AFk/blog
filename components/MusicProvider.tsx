@@ -167,8 +167,8 @@ const PLAYLISTS: Playlist[] = [
     name: '🎌 二次元',
     description: '动漫游戏，ACG 音乐',
     songs: [
-      // 以恋结缘（主QQ音乐，网易云作为后备）
-      { id: '004XqIYb0VPIUb', source: 'qq', alt: [{ id: '473403182', source: 'netease' }] },
+      // 恋ひ恋う縁（以恋结缘） - KOTOKO（原QQ音乐源已失效返回403，改用正常的网易云源）
+      { id: '473403182', source: 'netease' },
       // 安娜的橱窗 - 封茗囧菌
       { id: '537470060', source: 'netease' },
     ],
@@ -270,9 +270,7 @@ async function fetchSongWithFallback(songRef: SongRef, signal?: AbortSignal): Pr
 
   const allSources = [
     { id: songRef.id, source: songRef.source },
-    // 只保留 local 类型的 alt（VIP 歌曲走本地 mp3 替代），其他跨源 alt 已弃用
-    // （QQ ws.stream 已 403，Meting 公共跳板 api.injahow.cn 不稳定）
-    ...(songRef.alt || []).filter((a) => a.source === 'local'),
+    ...(songRef.alt || []),
   ];
 
   const urls: string[] = [];
@@ -286,42 +284,38 @@ async function fetchSongWithFallback(songRef: SongRef, signal?: AbortSignal): Pr
       localUrl = altUrl;
       continue;
     }
-
+    
     try {
       // 修复1：添加 5 秒超时，防止某个来源卡住整个歌单加载
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
-
+      
       // 支持外部取消信号（修复：使用 cleanup 避免内存泄漏）
       let onAbort: (() => void) | null = null;
       if (signal) {
         onAbort = () => controller.abort();
         signal.addEventListener('abort', onAbort, { once: true });
       }
-
-      const res = await fetch(`/api/music?ids=${id}&source=${source}`, {
-        signal: controller.signal,
+      
+      const res = await fetch(`/api/music?ids=${id}&source=${source}`, { 
+        signal: controller.signal 
       });
       clearTimeout(timeoutId);
-
+      
       // 清理外部信号监听
       if (signal && onAbort) {
         signal.removeEventListener('abort', onAbort);
       }
-
+      
       if (!res.ok) continue;
       const data = await res.json();
       const songData = data?.[0];
-      // 关键：歌曲标记为 unavailable（HTML 响应、VIP、版权受限）时直接丢弃，不进入 urls 数组
-      if (songData && !songData.error && songData.url && songData.url !== 'unavailable') {
+      if (songData && !songData.error && songData.url) {
         urls.push(songData.url);
         if (!merged) {
           parsedLyrics = parseLyrics(songData.lrc);
           merged = songData;
         }
-      } else if (songData?.error === 'unavailable') {
-        // 主源不可用（VIP/版权），整首歌不可用，让外层 nextSong 跳过
-        return null;
       }
     } catch {
       // 单个来源失败，继续尝试下一个
@@ -383,22 +377,13 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const [pendingPlayOnLoad, setPendingPlayOnLoad] = useState(false);  // 修复4：歌单加载完成后是否自动播放
   const [playbackRate, setPlaybackRate] = useState(1);
 
-/** 第三方绝对地址统一走 /api/music/stream 代理播放（绕过 CORS/混合内容/防盗链）；本域相对路径（本地文件）直接播放 */
-const toPlayableUrl = (url: string): string => {
-  if (!url) return '';
-  if (/^https?:\/\//.test(url)) {
-    return `/api/music/stream?url=${encodeURIComponent(url)}`;
-  }
-  return url;
-};
-
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const activePlaylist = PLAYLISTS.find(p => p.id === activePlaylistId);
   const currentSong = playlist[currentIndex];
 
-  // 当前实际使用的播放 URL（第三方直链经代理播放）
-  const currentUrl = toPlayableUrl(currentSong?.urls?.[currentUrlIdx] || currentSong?.url || '');
+  // 当前实际使用的播放 URL
+  const currentUrl = currentSong?.urls?.[currentUrlIdx] || currentSong?.url || '';
 
   // 重置 URL 索引（切歌时）
   useEffect(() => {
@@ -412,7 +397,16 @@ const toPlayableUrl = (url: string): string => {
     if (!isSwitchingSource) return;
     const timeoutId = setTimeout(() => {
       // currentTime 仍为 0 说明源一直未就绪，视为挂起，继续切换
-      if (audioRef.current && audioRef.current.currentTime === 0) {
+      const song = playlist[currentIndex];
+      // 仅当还有下一个来源时才超时切换；已是最后一个来源时不要判死——
+      // 慢加载的来源可能随后开始播放，若真失败 audio 会触发 onError 正常报错
+      if (
+        audioRef.current &&
+        audioRef.current.currentTime === 0 &&
+        song &&
+        song.urls &&
+        currentUrlIdx < song.urls.length - 1
+      ) {
         fallbackToNextUrl();
       }
     }, 10000);
@@ -577,9 +571,11 @@ const toPlayableUrl = (url: string): string => {
   useEffect(() => {
     if (!audioRef.current || playlist.length === 0) return;
     if (isPlaying) {
-      audioRef.current.play().catch(() => {
+      audioRef.current.play().catch((err) => {
+        // AbortError：play() 被新的 play()/load() 中断（切歌/切源时的正常竞态），音频随后会继续播放，不是失败
+        if (err && err.name === 'AbortError') return;
         setIsPlaying(false);
-        setError('播放失败，请稍后重试');
+        setError('播放失败，请检查浏览器权限');
       });
     } else {
       audioRef.current.pause();
@@ -626,26 +622,20 @@ const toPlayableUrl = (url: string): string => {
     setIsSwitchingSource(false);
   };
 
-  // ------- 音频错误处理：自动跳过当前无法播放的歌曲 -------
-  // 历史逻辑：尝试 urls 数组里下一个 alt 来源（QQ 音乐、Meting 跳板等）。但这些源要么 403
-  // （QQ ws.stream 已死）要么上游挂掉（api.injahow.cn 公共 Meting 经常挂），导致循环切坏链
-  // 仍无法播放。新逻辑：当前主源失败就提示并自动下一首。
+  // ------- 音频错误处理：自动切换下一个来源 -------
   const fallbackToNextUrl = () => {
-    if (audioRef.current) {
+    const song = playlist[currentIndex];
+    if (!song || !song.urls || currentUrlIdx >= song.urls.length - 1) {
+      // 所有来源都已用完
       setIsPlaying(false);
       setIsSwitchingSource(false);
-      setError(`「${playlist[currentIndex]?.title || '当前歌曲'}」无法播放，自动跳到下一首`);
-      // 短暂显示错误文案后自动跳到下一首
-      setTimeout(() => {
-        if (playlist.length > 0) {
-          setCurrentIndex((currentIndex + 1) % playlist.length);
-          setCurrentUrlIdx(0);
-          setCurrentTime(0);
-          setProgress(0);
-          setError('');
-        }
-      }, 1500);
+      setError(`「${song?.title || '当前歌曲'}」的所有来源均无法播放`);
+      return;
     }
+    // 修复2：设置加载状态，UI 可以显示切换中
+    setIsSwitchingSource(true);
+    setCurrentUrlIdx(prev => prev + 1);
+    setError(`正在尝试替代音频源...`);
   };
 
   const handleTimeUpdate = () => {
@@ -828,9 +818,11 @@ const toPlayableUrl = (url: string): string => {
           }
           // 修复2：新来源加载就绪后，如果正在切换中则自动播放
           if (isSwitchingSource && isPlaying && audioRef.current) {
-            audioRef.current.play().catch(() => {
+            audioRef.current.play().catch((err) => {
+              // 同上：忽略 AbortError 竞态中断，避免正常播放时误报"播放失败"
+              if (err && err.name === 'AbortError') return;
               setIsPlaying(false);
-              setError('播放失败，请稍后重试');
+              setError('播放失败，请检查浏览器权限');
             });
           }
         }}

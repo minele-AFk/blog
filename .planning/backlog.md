@@ -1,8 +1,8 @@
 # 待办 Backlog（遗留问题与后续规划）
 
-> 更新时间：2026-08-15
+> 更新时间：2026-08-16
 > 目的：汇总全项目审查发现的遗留问题与未完成的规划，方便后续恢复开发时直接调用。
-> 当前版本：**v0.6.8**（自定义确认弹窗 + 追番卡片按钮移除 + 文章填充）
+> 当前版本：**v0.7.0**（音乐播放器误报修复 + 追番封面缓存与交互体验）
 > 提醒：本文件只做记录，不承诺执行顺序；按需挑选执行。
 
 ---
@@ -30,7 +30,7 @@
 | # | 位置 | 问题 | 建议 |
 |---|------|------|------|
 | Q1 | [lib/music-cache.ts](file:///e:/Java/personal-blog/lib/music-cache.ts) | 缓存无过期淘汰、无大小上限，`writeFileSync` 全量同步重写；多实例部署 last-writer-wins 会丢条目 | ✅ 已加 TTL(30min) 惰性清理 + 500 条上限淘汰 + 原子写入（2026-08-09 批次2） |
-| Q2 | [components/MusicProvider.tsx](file:///e:/Java/personal-blog/components/MusicProvider.tsx) | 切换音频源无整体超时：若源"挂起"（不触发 timeupdate 也不触发 error），"正在切换音频源…" 提示与 error 永不消失 | ✅ 已加 10s 超时兜底（2026-08-09 批次2） |
+| Q2 | [components/MusicProvider.tsx](file:///e:/Java/personal-blog/components/MusicProvider.tsx) | 切换音频源无整体超时：若源"挂起"（不触发 timeupdate 也不触发 error），"正在切换音频源…" 提示与 error 永不消失 | ✅ 已加 10s 超时兜底（2026-08-09 批次2）；v0.7.0 修复超时误判（最后一个来源加载慢被提前判死报「所有来源均无法播放」） |
 | Q3 | [app/layout.tsx](file:///e:/Java/personal-blog/app/layout.tsx) | `NEXT_PUBLIC_SITE_URL` 未配置或无协议时 `new URL()` 抛 TypeError 导致构建失败；默认 `example.com` 占位 | 校验 env 格式 / 配置前降级处理 |
 
 ### 低优先级（健壮性/整洁度）

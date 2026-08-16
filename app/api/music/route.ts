@@ -65,46 +65,12 @@ async function fetchViaMeting(songId: string, server: 'netease' | 'tencent'): Pr
       artist: meta.artist || '未知歌手',
       cover: meta.pic || '',
       pic: meta.pic || '',
-      url: await resolvePlayUrl(songId, server),
+      url: `${METING_BASE}?server=${server}&type=url&id=${encodedId}`,
       lrc: lrcText,
     }
   } catch {
     return null
   }
-}
-
-/**
- * 解析真实可播放的音频直链（Workers 在服务器端解析，前端拿到后经 /api/music/stream 代理播放）。
- * 不直接返回 Meting 的 type=url 代理地址：该公共代理不稳定（曾因服务端 Redis 故障返回 HTML 错误页），
- * 且浏览器直连第三方 CDN 会因 CORS / 混合内容被拦截。
- */
-async function resolvePlayUrl(songId: string, server: 'netease' | 'tencent'): Promise<string> {
-  try {
-    // 策略一：Meting type=url 返回 302，跟随重定向拿真实 CDN 地址（此时 Meting 只是跳板）
-    const metingRes = await fetch(
-      `${METING_BASE}?server=${server}&type=url&id=${encodeURIComponent(songId)}`,
-      { signal: AbortSignal.timeout(10000), redirect: 'manual' }
-    )
-    if (metingRes.status >= 300 && metingRes.status < 400) {
-      const location = metingRes.headers.get('location')
-      if (location) return toHttps(location)
-    }
-    // Meting 不可用/未重定向，走平台直链兜底
-    if (server === 'tencent') {
-      return `https://ws.stream.qqmusic.qq.com/C400${songId}.m4a?fromtag=0&guid=1234567890`
-    }
-    return `https://music.163.com/song/media/outer/url?id=${encodeURIComponent(songId)}.mp3`
-  } catch {
-    if (server === 'tencent') {
-      return `https://ws.stream.qqmusic.qq.com/C400${songId}.m4a?fromtag=0&guid=1234567890`
-    }
-    return `https://music.163.com/song/media/outer/url?id=${encodeURIComponent(songId)}.mp3`
-  }
-}
-
-/** 将 http 直链升级为 https（https 页面中的 <audio> 禁止混合内容） */
-function toHttps(url: string): string {
-  return url.startsWith('http://') ? 'https://' + url.slice(7) : url
 }
 
 // ---------- 降级通道：直接请求网易云 / QQ 音乐（Meting 不可用时兜底） ----------
@@ -135,14 +101,6 @@ async function fetchNetEaseSongLegacy(songId: string): Promise<SongResult> {
       return { id: songId, error: 'not_found' }
     }
 
-    // 关键：网易云详情接口对 VIP/版权受限歌曲的 fee=1、st<0 等，但只要没有
-    // mp3 试听文件，outer/url 会返回 HTML 而非真实音频。先做标记，让前端
-    // 拿到 url 后能识别失败（用 0 字节占位 → fetch 时返回的就是 HTML 错误页）。
-    if (song.fee === 1 && song.st === -1) {
-      // VIP 且无试听：标记为不可用
-      return { id: songId, error: 'unavailable' }
-    }
-
     let lrcText = ''
     if (lrcRes && lrcRes.ok) {
       try {
@@ -168,7 +126,7 @@ async function fetchNetEaseSongLegacy(songId: string): Promise<SongResult> {
       if (metingRes.status >= 300 && metingRes.status < 400) {
         const location = metingRes.headers.get('location')
         if (location) {
-          playUrl = toHttps(location)
+          playUrl = location
         }
       }
     } catch {
@@ -188,38 +146,6 @@ async function fetchNetEaseSongLegacy(songId: string): Promise<SongResult> {
     console.error(`[api/music] 获取网易云歌曲 ${songId} 失败:`, error)
     return { id: songId, error: String(error) }
   }
-}
-
-/**
- * 主动 HEAD 探测 outer URL：跟随 302 后 Content-Type 仍为 text/html
- * （网易云对 VIP/版权受限歌曲的 outer/url 会返回 HTML 错误页），
- * 直接把 url 标记为不可用，让前端走 fallback 跳过这首。
- */
-async function probeAndMarkUnavailable(
-  playUrl: string
-): Promise<{ url: string; unavailable: boolean }> {
-  if (!playUrl || !playUrl.includes('music.163.com')) {
-    return { url: playUrl, unavailable: false }
-  }
-  try {
-    const r = await fetch(playUrl, {
-      method: 'HEAD',
-      redirect: 'follow',
-      signal: AbortSignal.timeout(8000),
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        Referer: 'https://music.163.com/',
-      },
-    })
-    const ct = r.headers.get('content-type') || ''
-    if (ct.includes('text/html')) {
-      return { url: 'unavailable', unavailable: true }
-    }
-  } catch {
-    /* 探测失败不动 url，前端播放会再次尝试 */
-  }
-  return { url: playUrl, unavailable: false }
 }
 
 async function fetchQQMusicSongLegacy(songId: string): Promise<SongResult> {
@@ -254,7 +180,7 @@ async function fetchQQMusicSongLegacy(songId: string): Promise<SongResult> {
       if (metingRes.status >= 300 && metingRes.status < 400) {
         const location = metingRes.headers.get('location')
         if (location) {
-          playUrl = toHttps(location)
+          playUrl = location
         }
       }
     } catch {
@@ -324,10 +250,9 @@ export async function GET(request: NextRequest) {
   // 带 30 分钟磁盘缓存：命中直接返回，未命中再请求第三方（主通道 Meting，失败降级原逻辑）
   // 并发限制为 3：防止一次歌单批量请求打爆第三方接口触发限流
   const fetchOne = async (songId: string): Promise<SongResult> => {
-    // v2：url 解析方式变更（改为真实直链 + 前端代理播放），旧缓存里的 Meting 代理 URL 作废，直接失效
-    const cacheKey = `v2:${source}:${songId}`
-    const cached = await getMusicCache<SongResult>(cacheKey)
-    if (cached && Date.now() - (await getMusicCacheTs(cacheKey)) < CACHE_TTL_MS) {
+    const cacheKey = `${source}:${songId}`
+    const cached = getMusicCache<SongResult>(cacheKey)
+    if (cached && Date.now() - getMusicCacheTs(cacheKey) < CACHE_TTL_MS) {
       return cached
     }
 
@@ -336,18 +261,9 @@ export async function GET(request: NextRequest) {
         ? (await fetchViaMeting(songId, 'tencent')) || (await fetchQQMusicSongLegacy(songId))
         : (await fetchViaMeting(songId, 'netease')) || (await fetchNetEaseSongLegacy(songId))
 
-    // 关键：网易云对 VIP/版权受限歌曲，outer/url 实际返回 HTML 错误页而不是音频。
-    // 主动 HEAD 探测确认是 HTML 时，把 url 标记为 'unavailable'，前端会跳过这首。
-    if (result && !result.error && result.url && result.url.includes('music.163.com')) {
-      const probed = await probeAndMarkUnavailable(result.url)
-      if (probed.unavailable) {
-        return { ...result, url: 'unavailable', error: 'unavailable' }
-      }
-    }
-
     // 成功结果才缓存，失败不缓存（便于限流解除后重试）
     if (!result.error) {
-      await setMusicCache(cacheKey, result)
+      setMusicCache(cacheKey, result)
     }
     return result
   }
