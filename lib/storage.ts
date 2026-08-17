@@ -101,7 +101,7 @@ function fromLatin1String(mangled: string): Uint8Array {
   return bytes;
 }
 
-function readKvAsString(key: string): string | null {
+async function readKvAsString(key: string): Promise<string | null> {
   const kv = getKv();
   if (!kv) return null;
   try {
