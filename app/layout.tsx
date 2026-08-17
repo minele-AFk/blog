@@ -7,6 +7,7 @@ import RouteWatcher from '../components/RouteWatcher';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import { MusicProvider } from '../components/MusicProvider';
 import BackgroundEffects from '../components/BackgroundEffects';
+import SplashScreen from '../components/SplashScreen';
 import { getSiteUrl } from '@/lib/site';
 import './globals.css';
 
@@ -52,24 +53,50 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN" data-scroll-behavior="smooth">
+      <head>
+        <style
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{
+            __html: `
+              #app-mount-root { opacity: 0; visibility: hidden; pointer-events: none; }
+              html.splash-seen #app-mount-root { opacity: 1 !important; visibility: visible !important; pointer-events: auto !important; }
+            `,
+          }}
+        />
+        <script
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                if (sessionStorage.getItem('hasSeenSplash') === 'true') {
+                  document.documentElement.classList.add('splash-seen');
+                }
+              } catch (e) {}
+            `,
+          }}
+        />
+      </head>
       <body className="min-h-screen relative">
         <ThemeProvider>
           <MusicProvider>
-            <RouteWatcher />
-            
-            <ParticleBackground />
-            
-            <BackgroundEffects />
-            
-            <Navbar />
-            
-            <main className="pt-16 pb-12 relative z-10">
-              <MotionWrapper>
-                {children}
-              </MotionWrapper>
-            </main>
+            <SplashScreen />
+            <div id="app-mount-root">
+              <RouteWatcher />
+              
+              <ParticleBackground />
+              
+              <BackgroundEffects />
+              
+              <Navbar />
+              
+              <main className="pt-16 pb-12 relative z-10">
+                <MotionWrapper>
+                  {children}
+                </MotionWrapper>
+              </main>
 
-            <BackToTop />
+              <BackToTop />
+            </div>
           </MusicProvider>
         </ThemeProvider>
       </body>

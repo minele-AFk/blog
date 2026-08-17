@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import EditModal from '@/components/EditModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import { getGithubAvatar } from '@/lib/friends';
 
 // 兼容 HTML5 拖拽（onDrop）与 framer-motion 拖拽事件的公共结构
 interface DragLikeEvent {
@@ -229,12 +230,12 @@ export default function FriendsPage() {
                   className="flex items-start gap-4 group"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 border-2 border-purple-500/30 group-hover:border-purple-500/60 transition-colors">
+                  <div className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0 border-2 border-purple-500/30 group-hover:border-purple-500/60 transition-colors">
                     <img
-                      src={friend.avatar}
+                      src={getGithubAvatar(friend.url) || friend.avatar}
                       alt={friend.name}
                       loading="lazy"
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover rounded-full transition-transform duration-700 group-hover:rotate-[360deg]"
                     />
                   </div>
                   <div className="flex-1">

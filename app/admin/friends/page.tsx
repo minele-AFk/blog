@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Edit2, Trash2, X, Send } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import { getGithubAvatar } from '@/lib/friends';
 
 interface Friend {
   id: string;
@@ -165,7 +166,9 @@ export default function FriendsPage() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="w-12 h-12 rounded-full bg-gray-700 overflow-hidden">
-                      {friend.avatar ? (
+                      {getGithubAvatar(friend.url) ? (
+                        <img src={getGithubAvatar(friend.url) || ''} alt={friend.name} loading="lazy" className="w-full h-full object-cover" />
+                      ) : friend.avatar ? (
                         <img src={friend.avatar} alt={friend.name} loading="lazy" className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-gray-400">

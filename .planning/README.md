@@ -7,7 +7,7 @@
 | 文档 | 说明 |
 |------|------|
 | [PRD.md](./PRD.md) | 产品需求文档 - 项目愿景、目标用户、核心功能、版本更新记录 |
-| [checklist.md](./checklist.md) | 功能清单 - 所有功能模块及完成状态 |
-| [milestones.md](./milestones.md) | 里程碑计划 - 分阶段交付计划 |
-| [tasks.md](./tasks.md) | 任务列表 - 具体开发任务及分配 |
+| [checklist.md](./checklist.md) | 功能清单 - 未完成功能模块 |
 | [backlog.md](./backlog.md) | 待办 Backlog - 遗留问题与后续规划（恢复开发时先读） |
+
+> 已完成的开发任务记录已精简（tasks.md / milestones.md 已移除），完整版本历史见根目录 `README.md` 版本记录表。
