@@ -14,7 +14,12 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 // 轻量类型声明（避免依赖 @cloudflare/workers-types）
 interface KvLike {
   get(key: string): Promise<string | null>;
+  // 关键：OpenNext 的 KV binding 把 raw bytes 当 latin1 解释后返回 string，
+  // 导致 UTF-8 中文二次编码成 mojibake。改用 arrayBuffer + TextDecoder('utf-8') 解码
+  // 可以完全绕开这个 bug，保持原始字节不变。
+  get(key: string, options: { type: 'arrayBuffer' }): Promise<ArrayBuffer | null>;
   put(key: string, value: string): Promise<void>;
+  put(key: string, value: ArrayBuffer | Uint8Array): Promise<void>;
   delete(key: string): Promise<void>;
   list(options?: {
     prefix?: string;
@@ -79,11 +84,24 @@ export function getR2(): R2BucketLike | null {
 
 // ---------------- KV 封装（JSON 值） ----------------
 
-export async function kvGetJson<T>(key: string): Promise<T | null> {
+// 工具：用 ArrayBuffer + TextDecoder 安全读取 KV 字符串，规避 OpenNext 的 latin1 mojibake
+async function kvReadString(key: string): Promise<string | null> {
   const kv = getKv();
   if (!kv) return null;
   try {
-    const raw = await kv.get(key);
+    // 优先用 arrayBuffer 读取原始字节，然后按 UTF-8 解码，
+    // 避免某些运行时（OpenNext Cloudflare）把 UTF-8 字节当 latin1 解释后返回 JS string
+    const buf = await kv.get(key, { type: 'arrayBuffer' });
+    if (!buf) return null;
+    return new TextDecoder('utf-8').decode(buf);
+  } catch {
+    return null;
+  }
+}
+
+export async function kvGetJson<T>(key: string): Promise<T | null> {
+  try {
+    const raw = await kvReadString(key);
     return raw ? (JSON.parse(raw) as T) : null;
   } catch {
     return null;
@@ -103,9 +121,7 @@ export async function kvSetRaw(key: string, value: string): Promise<void> {
 }
 
 export async function kvGetRaw(key: string): Promise<string | null> {
-  const kv = getKv();
-  if (!kv) return null;
-  return kv.get(key);
+  return kvReadString(key);
 }
 
 export async function kvDelete(key: string): Promise<void> {
