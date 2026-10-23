@@ -1,82 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken } from '../../../../lib/auth';
-import { getFriends, addFriend, updateFriend, deleteFriend as removeFriend } from '../../../../lib/json-store';
+import { isAdminRequest } from '@/lib/auth';
+import { getFriends, addFriend, updateFriend, deleteFriend } from '@/lib/json-store';
+import { readJsonObject, text, validateFields, withApiErrors } from '@/lib/request-security';
 
 export async function GET() {
-  const friends = await getFriends();
-  return NextResponse.json({ success: true, data: friends });
+  return NextResponse.json({ success: true, data: await getFriends() });
 }
 
-export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  const token = authHeader?.replace('Bearer ', '');
-  
-  if (!token || !verifyToken(token)) {
-    return NextResponse.json({ error: '未授权' }, { status: 401 });
-  }
+export const POST = withApiErrors(async (request: NextRequest) => {
+  if (!isAdminRequest(request)) return NextResponse.json({ error: '未授权' }, { status: 401 });
+  const body = validateFields('friends', await readJsonObject(request));
+  return NextResponse.json({ success: true, data: await addFriend(body) }, { status: 201 });
+});
 
-  const body = await request.json();
-  const { name, avatar, description, url, tags = [] } = body;
+export const PUT = withApiErrors(async (request: NextRequest) => {
+  if (!isAdminRequest(request)) return NextResponse.json({ error: '未授权' }, { status: 401 });
+  const { id: rawId, ...input } = await readJsonObject(request);
+  const id = text(rawId, 100, true);
+  const updates = validateFields('friends', input, true);
+  const updated = await updateFriend(id, updates);
+  if (!updated) return NextResponse.json({ error: '记录不存在' }, { status: 404 });
+  return NextResponse.json({ success: true, data: updated });
+});
 
-  if (!name || !url) {
-    return NextResponse.json({ error: '名称和链接地址不能为空' }, { status: 400 });
-  }
-
-  const newFriend = await addFriend({
-    name,
-    avatar: avatar || '',
-    description: description || '',
-    url,
-    tags,
-  });
-
-  return NextResponse.json({ success: true, data: newFriend }, { status: 201 });
-}
-
-export async function PUT(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  const token = authHeader?.replace('Bearer ', '');
-  
-  if (!token || !verifyToken(token)) {
-    return NextResponse.json({ error: '未授权' }, { status: 401 });
-  }
-
-  const body = await request.json();
-  const { id, ...updates } = body;
-
-  if (!id) {
-    return NextResponse.json({ error: 'ID不能为空' }, { status: 400 });
-  }
-
-  const updatedFriend = await updateFriend(id, updates);
-  
-  if (!updatedFriend) {
-    return NextResponse.json({ error: '友链不存在' }, { status: 404 });
-  }
-
-  return NextResponse.json({ success: true, data: updatedFriend });
-}
-
-export async function DELETE(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  const token = authHeader?.replace('Bearer ', '');
-  
-  if (!token || !verifyToken(token)) {
-    return NextResponse.json({ error: '未授权' }, { status: 401 });
-  }
-
-  const body = await request.json();
-  const { id } = body;
-
-  if (!id) {
-    return NextResponse.json({ error: 'ID不能为空' }, { status: 400 });
-  }
-
-  const deleted = await removeFriend(id);
-  
-  if (!deleted) {
-    return NextResponse.json({ error: '友链不存在' }, { status: 404 });
-  }
-
+export const DELETE = withApiErrors(async (request: NextRequest) => {
+  if (!isAdminRequest(request)) return NextResponse.json({ error: '未授权' }, { status: 401 });
+  const body = await readJsonObject(request);
+  const deleted = await deleteFriend(text(body.id, 100, true));
+  if (!deleted) return NextResponse.json({ error: '记录不存在' }, { status: 404 });
   return NextResponse.json({ success: true });
-}
+});

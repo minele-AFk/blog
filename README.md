@@ -62,7 +62,7 @@ npm run start
 
 ```env
 # JWT 密钥（用于生成管理员认证令牌）
-JWT_SECRET=your-secret-key-here
+JWT_SECRET=replace-with-at-least-32-random-characters
 
 # 管理员密码（登录时使用）
 ADMIN_PASSWORD=your-admin-password
@@ -179,6 +179,19 @@ personal-blog/
 | [.planning/backlog.md](./.planning/backlog.md) | 待办 Backlog |
 
 > 已完成的开发任务记录已精简（tasks.md / milestones.md 已移除），完整版本历史见上方版本记录表。
+
+## 安全检查
+
+2026-10-23 的检查范围、修复项、验证结果及部署待办见 [安全报告](docs/SECURITY-2026-10-23.md)。
+
+```bash
+npm test
+npm run typecheck
+npm run audit:security
+npm run build
+```
+
+上传仅支持 jpg/png/gif/webp/avif，SVG 上传已禁用。首次初始化管理员密码至少 12 字符，最多 72 UTF-8 字节；所有示例密钥必须替换为强随机值。
 
 ## 版本记录
 

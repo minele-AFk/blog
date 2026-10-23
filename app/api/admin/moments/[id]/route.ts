@@ -1,40 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken } from '../../../../../lib/auth';
-import { updateMoment, deleteMoment } from '../../../../../lib/json-store';
+import { isAdminRequest } from '@/lib/auth';
+import { updateMoment, deleteMoment } from '@/lib/json-store';
+import { readJsonObject, text, validateFields, withApiErrors } from '@/lib/request-security';
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const authHeader = request.headers.get('authorization');
-  const token = authHeader?.replace('Bearer ', '');
-  
-  if (!token || !verifyToken(token)) {
-    return NextResponse.json({ error: '未授权' }, { status: 401 });
-  }
+type Context = { params: Promise<{ id: string }> };
 
-  const body = await request.json();
-  const updated = await updateMoment(id, body);
-
-  if (!updated) {
-    return NextResponse.json({ error: '说说不存在' }, { status: 404 });
-  }
-
+export const PUT = withApiErrors(async (request: NextRequest, { params }: Context) => {
+  if (!isAdminRequest(request)) return NextResponse.json({ error: '未授权' }, { status: 401 });
+  const id = text((await params).id, 100, true);
+  const updates = validateFields('moments', await readJsonObject(request), true);
+  const updated = await updateMoment(id, updates);
+  if (!updated) return NextResponse.json({ error: '记录不存在' }, { status: 404 });
   return NextResponse.json({ success: true, data: updated });
-}
+});
 
-export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const authHeader = _request.headers.get('authorization');
-  const token = authHeader?.replace('Bearer ', '');
-  
-  if (!token || !verifyToken(token)) {
-    return NextResponse.json({ error: '未授权' }, { status: 401 });
-  }
-
-  const success = await deleteMoment(id);
-
-  if (!success) {
-    return NextResponse.json({ error: '说说不存在' }, { status: 404 });
-  }
-
+export const DELETE = withApiErrors(async (request: NextRequest, { params }: Context) => {
+  if (!isAdminRequest(request)) return NextResponse.json({ error: '未授权' }, { status: 401 });
+  const deleted = await deleteMoment(text((await params).id, 100, true));
+  if (!deleted) return NextResponse.json({ error: '记录不存在' }, { status: 404 });
   return NextResponse.json({ success: true });
-}
+});

@@ -21,7 +21,7 @@ export const getJwtSecret = () => {
   // 优先使用环境变量
   if (process.env.JWT_SECRET) {
     // 生产环境拒绝弱密钥与公开占位符（.env.example 中的示例值）
-    if (process.env.NODE_ENV === 'production' && (process.env.JWT_SECRET.length < 32 || /your-jwt-secret/i.test(process.env.JWT_SECRET))) {
+    if (process.env.NODE_ENV === 'production' && (process.env.JWT_SECRET.length < 32 || /your[-_]|replace[-_]|change[-_]?me|example|placeholder/i.test(process.env.JWT_SECRET))) {
       throw new Error('JWT_SECRET 强度不足：生产环境密钥长度需 ≥ 32 字符且不能使用示例占位符，请参考 .env.example 生成强密钥');
     }
     return process.env.JWT_SECRET;
@@ -43,7 +43,9 @@ export const getJwtSecret = () => {
 export const verifyToken = (token: string) => {
   const secret = getJwtSecret();
   try {
-    return jwt.verify(token, secret, { algorithms: ['HS256'] }) as { userId: string };
+    const payload = jwt.verify(token, secret, { algorithms: ['HS256'] });
+    if (typeof payload === 'string' || payload.userId !== 'admin' || typeof payload.exp !== 'number') return null;
+    return payload as jwt.JwtPayload & { userId: 'admin' };
   } catch {
     return null;
   }
@@ -51,6 +53,13 @@ export const verifyToken = (token: string) => {
 
 export const generateToken = () => {
   return jwt.sign({ userId: 'admin' }, getJwtSecret(), { expiresIn: '24h' });
+};
+
+export const isAdminRequest = (request: Request): boolean => {
+  const auth = request.headers.get('authorization');
+  if (!auth?.startsWith('Bearer ')) return false;
+  const token = auth.slice(7);
+  return token.length > 0 && token.length <= 4096 && !!verifyToken(token);
 };
 
 // 读取管理员数据（Workers 用 KV，本地用 fs）
@@ -84,7 +93,10 @@ export const getAdminPasswordHash = async (): Promise<string | null> => {
 };
 
 export const setAdminPassword = async (password: string) => {
-  const passwordHash = bcrypt.hashSync(password, 10);
+  if (typeof password !== 'string' || password.length < 12 || Buffer.byteLength(password, 'utf8') > 72 || /^your-admin-password$/i.test(password)) {
+    throw new Error('管理员密码需至少 12 字符、不超过 72 UTF-8 字节，且不能使用示例值');
+  }
+  const passwordHash = await bcrypt.hash(password, 10);
   const data: AdminData = {
     passwordHash,
     createdAt: new Date().toISOString(),
@@ -97,7 +109,7 @@ export const verifyPassword = async (password: string) => {
   if (!passwordHash) return false;
 
   try {
-    return bcrypt.compareSync(password, passwordHash);
+    return await bcrypt.compare(password, passwordHash);
   } catch {
     return false;
   }

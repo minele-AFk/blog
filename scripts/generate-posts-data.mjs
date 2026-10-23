@@ -2,7 +2,7 @@
 // 供 Cloudflare Workers（无持久磁盘）运行时回退使用。
 import fs from 'node:fs';
 import path from 'node:path';
-import matter from 'gray-matter';
+import { parseFrontmatter } from '../lib/frontmatter.mjs';
 
 const postsDir = path.join(process.cwd(), 'posts');
 const outDir = path.join(process.cwd(), 'lib', 'generated');
@@ -27,7 +27,7 @@ const posts = filenames
   .map((filename) => {
     const fullPath = path.join(postsDir, filename);
     const fileContents = fs.readFileSync(fullPath, 'utf8');
-    const { data, content } = matter(fileContents);
+    const { data, content } = parseFrontmatter(fileContents);
     const slug = filename.replace(/\.md$/, '');
     const readTime = Math.ceil(content.split('').length / 500);
     return {

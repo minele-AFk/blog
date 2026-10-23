@@ -44,7 +44,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     return new NextResponse(r2Object.body as unknown as ReadableStream, {
       status: 200,
       headers: {
-        'Content-Type': r2Object.httpMetadata?.contentType || contentType,
+        'Content-Type': contentType,
+        'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'",
+        'X-Content-Type-Options': 'nosniff',
         'Cache-Control': 'public, max-age=31536000, immutable',
       },
     });
@@ -60,6 +62,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       status: 200,
       headers: {
         'Content-Type': contentType,
+        'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'",
+        'X-Content-Type-Options': 'nosniff',
         'Cache-Control': 'public, max-age=31536000, immutable',
         'Content-Length': String(s.size),
       },

@@ -46,6 +46,8 @@ data/anime-detail-cache.json
 data/anime.json
 data/music-cache.json
 data/cover-cache/
+data/avatar-cache/
+data/image-cache/
 
 # vercel
 .vercel

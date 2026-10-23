@@ -21,7 +21,7 @@
 }
 ```
 
-> **安全说明：** 登录接口有 IP 级限流，连续失败 5 次后锁定 15 分钟（返回 429）。
+> **安全说明：** 登录接口按可信来源限制尝试：单进程每 15 分钟最多 5 次（包括成功和格式错误请求）；Workers 额外使用边缘限流绑定，每 IP 每分钟最多 5 次。超过限制返回 429。自建服务默认不信任访客提供的 IP 头。
 
 ## 图片上传接口
 
@@ -33,7 +33,7 @@
 
 请求体：`multipart/form-data`，字段 `file`（图片文件）
 
-支持格式：`jpg / png / gif / webp / svg / avif`，单张最大 10MB
+支持格式：`jpg / png / gif / webp / avif`，单张最大 10MB
 
 响应：
 ```json
@@ -710,7 +710,7 @@ public/music/
 
 请求头：`Authorization: Bearer <CRON_SECRET>`
 
-> Vercel Cron 定时调用，每天自动同步一次。也可使用外部 cron 服务调用。
+> 外部 cron 服务需使用 POST 和 Authorization: Bearer <CRON_SECRET>（至少 32 字符强随机值）。GET、URL 查询 token、User-Agent 都不能授权。原生 Workers scheduled 事件未连接此 HTTP 路由；缓存过期时仍会自动同步。
 
 ## 错误响应
 

@@ -18,7 +18,7 @@ interface KvLike {
   // 导致 UTF-8 中文二次编码成 mojibake。改用 arrayBuffer + TextDecoder('utf-8') 解码
   // 可以完全绕开这个 bug，保持原始字节不变。
   get(key: string, options: { type: 'arrayBuffer' }): Promise<ArrayBuffer | null>;
-  put(key: string, value: string): Promise<void>;
+  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
   put(key: string, value: ArrayBuffer | Uint8Array): Promise<void>;
   delete(key: string): Promise<void>;
   list(options?: {
@@ -83,6 +83,12 @@ export function getR2(): R2BucketLike | null {
 }
 
 // ---------------- KV 封装（JSON 值） ----------------
+export function getLoginRateLimiter(): { limit(options: { key: string }): Promise<{ success: boolean }> } | null {
+  if (!isCloudflare()) return null;
+  const env = getCloudflareContext({ async: false }).env as Record<string, unknown>;
+  return (env.LOGIN_RATE_LIMITER as ReturnType<typeof getLoginRateLimiter>) ?? null;
+}
+
 
 // 工具：base64 编码字符串为 ASCII 字节。Workers 部署时（OpenNext），
 // KV binding 中转链路会把 UTF-8 字节破坏成 mojibake（疑似 latin1 解释后重新编码）。
@@ -142,11 +148,11 @@ export async function kvSetJson(key: string, value: unknown): Promise<void> {
   await kv.put(key, B64_PREFIX + toBase64(json));
 }
 
-export async function kvSetRaw(key: string, value: string): Promise<void> {
+export async function kvSetRaw(key: string, value: string, options?: { expirationTtl?: number }): Promise<void> {
   const kv = getKv();
   if (!kv) return;
   // 原始字符串也走 base64，保证非 ASCII 字符串不会在 KV 中转时被破坏
-  await kv.put(key, B64_PREFIX + toBase64(value));
+  await kv.put(key, B64_PREFIX + toBase64(value), options);
 }
 
 export async function kvGetRaw(key: string): Promise<string | null> {

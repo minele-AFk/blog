@@ -26,7 +26,7 @@ export default function ImageUploader({ images, onChange, maxImages = 9, label =
       return;
     }
 
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'image/avif'];
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif'];
     if (!allowedTypes.includes(file.type)) {
       alert('不支持的文件类型');
       return;
@@ -154,7 +154,7 @@ export default function ImageUploader({ images, onChange, maxImages = 9, label =
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/gif,image/webp,image/avif"
               multiple
               onChange={handleFileSelect}
               className="hidden"

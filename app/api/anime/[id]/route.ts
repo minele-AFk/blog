@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCachedAnime } from '@/lib/kazumi';
 import { isCloudflare, kvGetJson, kvSetJson } from '@/lib/storage';
 
-const BANGUMI_API = 'https://api.bgmapi.com';
+const BANGUMI_API = 'https://api.bgm.tv';
 const BANGUMI_TOKEN = process.env.BANGUMI_TOKEN || '';
 const USER_AGENT = 'personal-blog/1.0';
 
@@ -101,7 +101,7 @@ export async function GET(
 ) {
   const { id } = await params;
 
-  if (!id) {
+  if (!/^[1-9][0-9]{0,9}$/.test(id)) {
     return NextResponse.json({ success: false, error: '缺少番剧ID' }, { status: 400 });
   }
 
@@ -125,6 +125,7 @@ export async function GET(
     const detailRes = await fetch(`${BANGUMI_API}/v0/subjects/${id}`, {
       headers,
       signal: AbortSignal.timeout(15000),
+      redirect: 'error',
     });
     if (!detailRes.ok) {
       return NextResponse.json({ success: false, error: '获取番剧详情失败' }, { status: 502 });

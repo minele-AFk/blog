@@ -244,8 +244,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing ids parameter' }, { status: 400 })
   }
 
+  const requestedIds = ids.split(',').map((id) => id.trim()).filter(Boolean)
+  if (!['netease', 'qq'].includes(source) || requestedIds.length === 0 || requestedIds.length > 50 || requestedIds.some((id) => !/^[a-zA-Z0-9_-]{1,64}$/.test(id))) {
+    return NextResponse.json({ error: 'Invalid source or song IDs' }, { status: 400 })
+  }
+
   // 限制单次请求数量，防止被用作第三方接口的放大/拖慢手段
-  const songIds = ids.split(',').map((id) => id.trim()).filter(Boolean).slice(0, 50)
+  const songIds = [...new Set(requestedIds)]
 
   // 带 30 分钟磁盘缓存：命中直接返回，未命中再请求第三方（主通道 Meting，失败降级原逻辑）
   // 并发限制为 3：防止一次歌单批量请求打爆第三方接口触发限流

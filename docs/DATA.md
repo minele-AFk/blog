@@ -17,7 +17,7 @@ data/
 上传的图片存放在 `public/uploads/` 目录（不在 `data/` 下），说说/项目的图片字段保存的是 `/uploads/xxx.jpg` 相对路径。
 
 - **上传方式**：通过 `POST /api/upload` 接口上传（需管理员 JWT），或直接在说说/项目编辑弹窗中拖拽/选择图片
-- **支持格式**：jpg / png / gif / webp / svg / avif，单张最大 10MB
+- **支持格式**：jpg / png / gif / webp / avif，单张最大 10MB
 - **总量限制**：最多 500 张，总大小 200MB（超限需在图库管理清理）
 - **管理方式**：登录后访问 `/admin/gallery` 图库管理页，可查看缩略图、删除图片
 - **注意事项**：删除图片文件不会自动更新引用它的说说/项目，被引用处会显示破图
@@ -262,7 +262,7 @@ tags: ["React", "Next.js"]
 
 **同步机制：**
 1. 手动同步：管理员点击同步按钮触发
-2. 定时同步：Vercel Cron 每天自动调用 `/api/anime/cron`
+2. 定时同步：外部调度使用 POST `/api/anime/cron`，携带 `Authorization: Bearer <CRON_SECRET>`（至少 32 字符强随机值）
 3. 访问自动同步：缓存超过 24 小时后，下次访问时自动同步
 
 **缓存有效期：** 24 小时

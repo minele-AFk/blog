@@ -12,6 +12,13 @@
   "observability": {
     "enabled": true
   },
+  "ratelimits": [
+    {
+      "name": "LOGIN_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 5, "period": 60 }
+    }
+  ],
   // 业务数据存储：Workers 无持久磁盘，data/*.json 与后台发文改存 KV
   "kv_namespaces": [
     {
@@ -28,12 +35,9 @@
   //   }
   // ],
   // 定时任务：追番每日同步（原 vercel.json crons 迁移到 Workers）
-  // 注意：Cloudflare Cron Triggers 只接受 cron 字符串，不支持 path 字段。
-  // cron 触发请求会打到 worker 根路径（UA 以 Cloudflare 开头），
-  // 同步逻辑仍可手动触发：GET /api/anime/cron?token=<CRON_SECRET>（或 ADMIN_TOKEN）
-  "triggers": {
-    "crons": ["0 0 * * *"]
-  },
+  // 外部定时任务请 POST /api/anime/cron 并设置 Authorization: Bearer <CRON_SECRET>。
+  // 原生 scheduled 事件没有绑定处理器，不能用可伪造的 User-Agent 代替认证。
+  // 公开追番接口在缓存过期时仍会自动同步。
   // 公开变量（secrets 如 JWT_SECRET / ADMIN_PASSWORD / BANGUMI_TOKEN / CRON_SECRET
   // 请在 Cloudflare Dashboard -> Workers -> blog -> Settings -> Variables 中配置）
   "vars": {

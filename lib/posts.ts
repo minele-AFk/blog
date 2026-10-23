@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import matter from 'gray-matter';
+import { parseFrontmatter } from './frontmatter.mjs';
 import { BlogPost, Category, Tag } from './types';
 import { isCloudflare, kvGetJson, kvSetRaw, kvGetRaw, kvDelete } from './storage';
 // 构建时由 scripts/generate-posts-data.mjs 生成，供无持久磁盘环境（Cloudflare Workers）回退
@@ -17,7 +17,7 @@ const postKey = (slug: string) => `post:${slug}`;
 
 // 解析 markdown 字符串为 BlogPost（前后端共用，字段空值兜底）
 const parseMarkdownPost = (slug: string, raw: string): BlogPost => {
-  const { data, content } = matter(raw);
+  const { data, content } = parseFrontmatter(raw);
   const readTime = Math.ceil(content.split('').length / 500);
   return {
     id: slug,

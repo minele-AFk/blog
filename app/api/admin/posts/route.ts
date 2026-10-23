@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken } from '../../../../lib/auth';
+import { isAdminRequest } from '@/lib/auth';
+import { readJsonObject, validateFields, text, withApiErrors } from '@/lib/request-security';
 import { getPosts, savePostToKv, postExistsInKv } from '../../../../lib/posts';
 import { isValidSlug } from '../../../../lib/slug';
 import fs from 'fs';
 import path from 'path';
-import matter from 'gray-matter';
+import { stringifyFrontmatter } from '@/lib/frontmatter.mjs';
 import { isCloudflare } from '../../../../lib/storage';
 
 export async function GET() {
@@ -12,42 +13,17 @@ export async function GET() {
   return NextResponse.json({ success: true, data: posts });
 }
 
-export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  const token = authHeader?.replace('Bearer ', '');
-  
-  if (!token || !verifyToken(token)) {
+export const POST = withApiErrors(async function POST(request: NextRequest) {
+  if (!isAdminRequest(request)) {
     return NextResponse.json({ error: '未授权' }, { status: 401 });
   }
 
-  let body: Record<string, unknown>;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: '请求体格式错误' }, { status: 400 });
-  }
-  const { title, slug, excerpt, content, date, tags, category, author, coverImage } = body as {
-    title?: string;
-    slug?: string;
-    excerpt?: string;
-    content?: string;
-    date?: string;
-    tags?: string[];
-    category?: string;
-    author?: string;
-    coverImage?: string;
-  };
-
-  if (!title || !content) {
-    return NextResponse.json({ error: '标题和内容不能为空' }, { status: 400 });
-  }
-
-  const postSlug = slug || title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '');
+  const { slug: rawSlug, ...input } = await readJsonObject(request);
+  const { content, ...frontmatter } = validateFields('posts', input);
+  const slug = text(rawSlug, 100);
+  const postSlug = slug || frontmatter.title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '');
   if (!isValidSlug(postSlug)) {
-    const error = slug
-      ? 'slug 格式不合法（仅允许字母、数字、下划线、连字符）'
-      : '标题无法自动生成英文 slug，请在 slug 字段填写英文路径（仅允许字母、数字、下划线、连字符）';
-    return NextResponse.json({ error }, { status: 400 });
+    return NextResponse.json({ error: '请填写合法英文 slug（字母、数字、下划线、连字符）' }, { status: 400 });
   }
   const postsDirectory = path.join(process.cwd(), 'posts');
   const targetPath = path.join(postsDirectory, `${postSlug}.md`);
@@ -61,17 +37,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const frontmatter = {
-    title,
-    excerpt: excerpt || '',
-    date: date || new Date().toISOString().split('T')[0],
-    tags: tags || [],
-    category: category || '其他',
-    author: author || '管理员',
-    coverImage: coverImage || '',
-  };
-
-  const fileContent = matter.stringify(content, frontmatter);
+  const fileContent = stringifyFrontmatter(content, frontmatter);
 
   // Workers 无磁盘：写入 KV；本地：写入 posts/*.md
   if (isCloudflare()) {
@@ -84,4 +50,4 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ success: true, data: { slug: postSlug, ...frontmatter } }, { status: 201 });
-}
+});

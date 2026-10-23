@@ -1,7 +1,7 @@
 import { Anime, AnimeStatus } from './types';
 import { isCloudflare, kvGetJson, kvSetJson } from './storage';
 
-const BANGUMI_API = 'https://api.bgmapi.com';
+const BANGUMI_API = 'https://api.bgm.tv';
 const BANGUMI_TOKEN = process.env.BANGUMI_TOKEN || '';
 const USER_AGENT = 'personal-blog/1.0';
 
@@ -42,6 +42,7 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise
     const res = await fetch(url, {
       ...options,
       signal: controller.signal,
+      redirect: 'error',
     });
     clearTimeout(timeoutId);
     return res;

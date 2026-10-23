@@ -1,26 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken } from '../../../../../lib/auth';
+import { isAdminRequest } from '@/lib/auth';
+import { readJsonObject, validateFields, text, withApiErrors } from '@/lib/request-security';
 import { isValidSlug } from '../../../../../lib/slug';
 import { savePostToKv, deletePostFromKv, postExistsInKv } from '../../../../../lib/posts';
 import { isCloudflare } from '../../../../../lib/storage';
 import fs from 'fs';
 import path from 'path';
-import matter from 'gray-matter';
+import { stringifyFrontmatter } from '@/lib/frontmatter.mjs';
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
+export const PUT = withApiErrors(async function PUT(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   if (!isValidSlug(slug)) {
     return NextResponse.json({ error: 'slug 格式不合法' }, { status: 400 });
   }
-  const authHeader = request.headers.get('authorization');
-  const token = authHeader?.replace('Bearer ', '');
-  
-  if (!token || !verifyToken(token)) {
+  if (!isAdminRequest(request)) {
     return NextResponse.json({ error: '未授权' }, { status: 401 });
   }
 
-  const body = await request.json();
-  const { title, excerpt, content, date, tags, category, author, coverImage } = body;
+  const { slug: rawSlug, ...input } = await readJsonObject(request);
+  if (rawSlug !== undefined && rawSlug !== slug) return NextResponse.json({ error: '不能通过编辑修改 slug' }, { status: 400 });
+  const { content, ...frontmatter } = validateFields('posts', input);
 
   const postsDirectory = path.join(process.cwd(), 'posts');
   const resolvedPath = path.resolve(postsDirectory, `${slug}.md`);
@@ -35,17 +34,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: '文章不存在' }, { status: 404 });
   }
 
-  const frontmatter = {
-    title: title || '',
-    excerpt: excerpt || '',
-    date: date || '',
-    tags: tags || [],
-    category: category || '其他',
-    author: author || '管理员',
-    coverImage: coverImage || '',
-  };
-
-  const fileContent = matter.stringify(content || '', frontmatter);
+  const fileContent = stringifyFrontmatter(content, frontmatter);
 
   // Workers 无磁盘：写入 KV；本地：写入 posts/*.md
   if (isCloudflare()) {
@@ -55,17 +44,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   return NextResponse.json({ success: true, data: { slug, ...frontmatter } });
-}
+});
 
-export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
+export const DELETE = withApiErrors(async function DELETE(_request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   if (!isValidSlug(slug)) {
     return NextResponse.json({ error: 'slug 格式不合法' }, { status: 400 });
   }
-  const authHeader = _request.headers.get('authorization');
-  const token = authHeader?.replace('Bearer ', '');
-  
-  if (!token || !verifyToken(token)) {
+  if (!isAdminRequest(_request)) {
     return NextResponse.json({ error: '未授权' }, { status: 401 });
   }
 
@@ -89,4 +75,4 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     fs.unlinkSync(filePath);
   }
   return NextResponse.json({ success: true });
-}
+});

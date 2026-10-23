@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeFile, mkdir, readdir, stat } from 'fs/promises';
 import path from 'path';
 import { verifyToken } from '../../../lib/auth';
-import { isCloudflare, r2Put } from '../../../lib/storage';
+import { isCloudflare, r2Put, r2List } from '../../../lib/storage';
+import { readLimitedBody, RequestError } from '@/lib/request-security';
+import { randomUUID } from 'node:crypto';
 
 // ---- 上传总量限制（本地 fs 模式），防止磁盘被塞满 ----
 const MAX_FILES = 500; // uploads 目录最多文件数
@@ -42,11 +44,6 @@ const matchesMagic = (buffer: Buffer, type: string): boolean => {
       return hex.startsWith('52494646') && hex.slice(16, 24) === '57454250'; // RIFF....WEBP
     case 'image/avif':
       return hex.slice(8, 16) === '66747970' && (hex.slice(16, 24) === '61766966' || hex.slice(16, 24) === '61766973'); // ftyp avif/avis
-    case 'image/svg+xml': {
-      // SVG 是文本文件，检查开头内容
-      const text = buffer.subarray(0, 1024).toString('utf8').trimStart();
-      return text.startsWith('<svg') || text.startsWith('<?xml');
-    }
     default:
       return false;
   }
@@ -62,17 +59,18 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const formData = await request.formData();
-    const file = formData.get('file') as File | null;
+    const body = await readLimitedBody(request, 10 * 1024 * 1024 + 64 * 1024);
+    const formData = await new Response(body, { headers: { 'Content-Type': request.headers.get('content-type') ?? '' } }).formData();
+    const file = formData.get('file');
 
-    if (!file) {
+    if (!file || typeof file === 'string') {
       return NextResponse.json({ error: '请选择要上传的文件' }, { status: 400 });
     }
 
     // 验证文件类型
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'image/avif'];
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif'];
     if (!allowedTypes.includes(file.type)) {
-      return NextResponse.json({ error: '不支持的文件类型，仅支持 jpg/png/gif/webp/svg/avif' }, { status: 400 });
+      return NextResponse.json({ error: '仅支持 jpg/png/gif/webp/avif，SVG 可执行脚本，禁止上传' }, { status: 400 });
     }
 
     // 限制文件大小 10MB
@@ -94,14 +92,17 @@ export async function POST(request: NextRequest) {
       'image/png': 'png',
       'image/gif': 'gif',
       'image/webp': 'webp',
-      'image/svg+xml': 'svg',
       'image/avif': 'avif',
     };
     const ext = extMap[file.type] || 'jpg';
-    const filename = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${ext}`;
+    const filename = `${Date.now()}-${randomUUID()}.${ext}`;
 
     // Workers：写入 R2（无磁盘）；本地：写入 public/uploads
     if (isCloudflare()) {
+      const objects = await r2List();
+      if (objects.length >= MAX_FILES || objects.reduce((size, item) => size + item.size, 0) + buffer.length > MAX_TOTAL_SIZE) {
+        return NextResponse.json({ error: '图片存储已达上限，请先在图库清理' }, { status: 400 });
+      }
       const ok = await r2Put(filename, buffer, file.type);
       if (!ok) {
         return NextResponse.json({ error: '上传失败（R2 写入错误）' }, { status: 500 });
@@ -133,6 +134,8 @@ export async function POST(request: NextRequest) {
       message: '上传成功',
     });
   } catch (error) {
+    if (error instanceof RequestError) return NextResponse.json({ error: error.message }, { status: error.status });
+    if (error instanceof TypeError) return NextResponse.json({ error: '上传请求格式错误' }, { status: 400 });
     console.error('Upload error:', error);
     return NextResponse.json({ error: '上传失败' }, { status: 500 });
   }
