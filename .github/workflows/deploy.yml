@@ -44,3 +44,12 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy
+
+      - name: Verify deployed site
+        timeout-minutes: 2
+        run: |
+          for path in / /api/admin/projects; do
+            curl --fail --silent --show-error --location \
+              --retry 5 --retry-all-errors --retry-delay 5 --max-time 15 \
+              --output /dev/null "https://blog.1653500384.workers.dev${path}"
+          done
