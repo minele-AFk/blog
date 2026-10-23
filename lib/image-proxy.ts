@@ -77,7 +77,7 @@ export async function serveImageProxy(request: Request, kind: Kind): Promise<Res
   try {
     const res = await fetch(target, {
       headers: { 'User-Agent': 'personal-blog/1.0', Accept: 'image/jpeg,image/png,image/gif,image/webp' },
-      redirect: 'error', signal: AbortSignal.timeout(10000),
+      redirect: 'manual', signal: AbortSignal.timeout(10000),
     });
     if (!res.ok || !/^image\/(jpeg|png|gif|webp)(;|$)/i.test(res.headers.get('content-type') ?? '')) {
       await res.body?.cancel();

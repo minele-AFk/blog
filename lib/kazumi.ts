@@ -1,5 +1,5 @@
 import { Anime, AnimeStatus } from './types';
-import { isCloudflare, kvGetJson, kvSetJson } from './storage';
+import { isCloudflare, kvGetJson, kvSetJson, runInBackground } from './storage';
 
 const BANGUMI_API = 'https://api.bgm.tv';
 const BANGUMI_TOKEN = process.env.BANGUMI_TOKEN || '';
@@ -42,9 +42,13 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise
     const res = await fetch(url, {
       ...options,
       signal: controller.signal,
-      redirect: 'error',
+      redirect: 'manual',
     });
     clearTimeout(timeoutId);
+    if (res.status >= 300 && res.status < 400) {
+      await res.body?.cancel();
+      throw new Error('Bangumi API 返回重定向，已拒绝转发访问令牌');
+    }
     return res;
   } catch (error) {
     clearTimeout(timeoutId);
@@ -279,7 +283,7 @@ export async function getCachedAnime(): Promise<Anime[]> {
     return cache.data;
   }
   // 缓存过期：立即返回旧缓存（如有），后台静默同步，不阻塞本次请求
-  void syncFromKazumi().catch((err) => console.error('后台同步失败:', err));
+  runInBackground(syncFromKazumi().catch((err) => console.error('后台同步失败:', err)));
   return cache?.data || [];
 }
 

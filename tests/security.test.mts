@@ -172,15 +172,20 @@ test('image proxy rejects redirects, non-images and oversized streams', async ()
   const request = new Request('https://blog.test/api/avatar?u=https://avatars.githubusercontent.com/security-test');
   try {
     globalThis.fetch = async (_input, options) => {
-      assert.equal(options?.redirect, 'error');
+      assert.equal(options?.redirect, 'manual');
       assert.ok(options?.signal);
       return new Response('<svg><script/></svg>', { headers: { 'Content-Type': 'image/svg+xml' } });
     };
     assert.equal((await imageProxy.serveImageProxy(request, 'avatar')).status, 502);
     globalThis.fetch = async () => new Response(new Uint8Array(2 * 1024 * 1024 + 1), { headers: { 'Content-Type': 'image/png' } });
     assert.equal((await imageProxy.serveImageProxy(request, 'avatar')).status, 502);
-    globalThis.fetch = async () => { throw new TypeError('redirect disallowed'); };
+    let redirects = 0;
+    globalThis.fetch = async () => {
+      redirects++;
+      return new Response(null, { status: 302, headers: { Location: 'http://127.0.0.1/private' } });
+    };
     assert.equal((await imageProxy.serveImageProxy(request, 'avatar')).status, 502);
+    assert.equal(redirects, 1);
   } finally { globalThis.fetch = originalFetch; }
 });
 

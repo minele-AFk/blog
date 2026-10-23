@@ -125,7 +125,7 @@ export async function GET(
     const detailRes = await fetch(`${BANGUMI_API}/v0/subjects/${id}`, {
       headers,
       signal: AbortSignal.timeout(15000),
-      redirect: 'error',
+      redirect: 'manual',
     });
     if (!detailRes.ok) {
       return NextResponse.json({ success: false, error: '获取番剧详情失败' }, { status: 502 });

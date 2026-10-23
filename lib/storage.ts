@@ -89,6 +89,12 @@ export function getLoginRateLimiter(): { limit(options: { key: string }): Promis
   return (env.LOGIN_RATE_LIMITER as ReturnType<typeof getLoginRateLimiter>) ?? null;
 }
 
+// Keep background sync alive after a Workers response has been sent.
+export function runInBackground(task: Promise<unknown>): void {
+  if (isCloudflare()) getCloudflareContext({ async: false }).ctx.waitUntil(task);
+  else void task;
+}
+
 
 // 工具：base64 编码字符串为 ASCII 字节。Workers 部署时（OpenNext），
 // KV binding 中转链路会把 UTF-8 字节破坏成 mojibake（疑似 latin1 解释后重新编码）。

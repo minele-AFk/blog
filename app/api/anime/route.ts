@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAnimeList, getCacheStatus, syncFromKazumi, isConfigReady } from '@/lib/kazumi';
+import { runInBackground } from '@/lib/storage';
 
 export async function GET() {
   try {
@@ -9,8 +10,8 @@ export async function GET() {
 
     // 缓存过期：后台异步同步，不阻塞本次响应
     if (status.expired && isConfigReady()) {
-      void syncFromKazumi()
-        .catch((err) => console.error('后台同步失败:', err));
+      runInBackground(syncFromKazumi()
+        .catch((err) => console.error('后台同步失败:', err)));
     }
 
     return NextResponse.json({
